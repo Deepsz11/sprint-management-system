@@ -18,6 +18,7 @@ const WorkItemsPage = lazy(() => import("@/pages/work-items/WorkItemsPage"));
 const BusinessOutcomesPage = lazy(
   () => import("@/pages/business-outcomes/BusinessOutcomesPage"),
 );
+const KPIsPage = lazy(() => import("@/pages/kpis/KPIsPage"));
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -64,10 +65,7 @@ export function AppRouter() {
               path={ROUTES.BUSINESS_OUTCOMES}
               element={<BusinessOutcomesPage />}
             />
-            <Route
-              path={ROUTES.KPIS}
-              element={<ModulePlaceholder title="KPIs" />}
-            />
+            <Route path={ROUTES.KPIS} element={<KPIsPage />} />
             <Route
               path={ROUTES.OKRS}
               element={<ModulePlaceholder title="OKRs" />}

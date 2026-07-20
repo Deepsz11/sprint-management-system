@@ -29529,3 +29529,2399 @@ with:
 ```
 
 No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/kpis/types.ts
+
+```ts
+export type KPIUnit =
+  | "currency"
+  | "percent"
+  | "count"
+  | "ratio"
+  | "duration_seconds"
+  | "duration_days"
+  | "score";
+
+export type KPIDirection = "increase" | "decrease" | "maintain";
+
+export type KPIHealth = "on_track" | "at_risk" | "off_track" | "achieved";
+
+export interface KPI {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly outcome_id: string | null;
+  readonly owner_id: string | null;
+  readonly name: string;
+  readonly description: string | null;
+  readonly unit: KPIUnit;
+  readonly currency: string | null;
+  readonly direction: KPIDirection;
+  readonly baseline_value: string | number | null;
+  readonly target_value: string | number | null;
+  readonly current_value: string | number | null;
+  readonly data_source: string | null;
+  readonly refresh_frequency_hours: number | null;
+  readonly is_active: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface KPIOutcomeOption {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly name: string;
+  readonly status: string;
+}
+
+export interface KPIOwnerOption {
+  readonly id: string;
+  readonly email: string;
+  readonly full_name: string;
+  readonly organization_id: string | null;
+  readonly role: string;
+  readonly status: string;
+}
+
+export interface PaginatedKPIs {
+  readonly items: KPI[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedKPIOutcomes {
+  readonly items: KPIOutcomeOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedKPIOwners {
+  readonly items: KPIOwnerOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CreateKPIInput {
+  readonly outcome_id?: string | null;
+  readonly owner_id?: string | null;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly unit: KPIUnit;
+  readonly currency?: string | null;
+  readonly direction: KPIDirection;
+  readonly baseline_value?: string | null;
+  readonly target_value?: string | null;
+  readonly current_value?: string | null;
+  readonly data_source?: string | null;
+  readonly refresh_frequency_hours?: number | null;
+}
+
+export interface UpdateKPIInput {
+  readonly outcome_id?: string | null;
+  readonly owner_id?: string | null;
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly direction?: KPIDirection;
+  readonly baseline_value?: string | null;
+  readonly target_value?: string | null;
+  readonly current_value?: string | null;
+  readonly data_source?: string | null;
+  readonly refresh_frequency_hours?: number | null;
+  readonly is_active?: boolean;
+}
+
+export interface KPIListParams {
+  readonly limit: number;
+  readonly offset: number;
+  readonly outcome_id?: string;
+  readonly owner_id?: string;
+  readonly unit?: readonly KPIUnit[];
+  readonly is_active?: boolean;
+}
+```
+
+### frontend/src/features/kpis/kpisApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  CreateKPIInput,
+  KPI,
+  KPIListParams,
+  PaginatedKPIOutcomes,
+  PaginatedKPIOwners,
+  PaginatedKPIs,
+  UpdateKPIInput,
+} from "./types";
+
+function buildParams(params: KPIListParams): Record<string, unknown> {
+  const query: Record<string, unknown> = {
+    limit: params.limit,
+    offset: params.offset,
+  };
+  if (params.outcome_id) query.outcome_id = params.outcome_id;
+  if (params.owner_id) query.owner_id = params.owner_id;
+  if (params.unit && params.unit.length > 0) {
+    query.unit = [...params.unit];
+  }
+  if (typeof params.is_active === "boolean") {
+    query.is_active = params.is_active;
+  }
+  return query;
+}
+
+export const kpisApi = {
+  async list(params: KPIListParams): Promise<PaginatedKPIs> {
+    const response = await apiClient.get<PaginatedKPIs>(API_ENDPOINTS.KPIS, {
+      params: buildParams(params),
+    });
+    return response.data;
+  },
+
+  async get(id: string): Promise<KPI> {
+    const response = await apiClient.get<KPI>(`${API_ENDPOINTS.KPIS}/${id}`);
+    return response.data;
+  },
+
+  async create(input: CreateKPIInput): Promise<KPI> {
+    const response = await apiClient.post<KPI>(API_ENDPOINTS.KPIS, input);
+    return response.data;
+  },
+
+  async update(id: string, input: UpdateKPIInput): Promise<KPI> {
+    const response = await apiClient.patch<KPI>(
+      `${API_ENDPOINTS.KPIS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.KPIS}/${id}`);
+  },
+
+  async listOutcomes(): Promise<PaginatedKPIOutcomes> {
+    const response = await apiClient.get<PaginatedKPIOutcomes>(
+      API_ENDPOINTS.BUSINESS_OUTCOMES,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+
+  async listOwners(): Promise<PaginatedKPIOwners> {
+    const response = await apiClient.get<PaginatedKPIOwners>(
+      API_ENDPOINTS.USERS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/kpis/kpiSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const UNITS = [
+  "currency",
+  "percent",
+  "count",
+  "ratio",
+  "duration_seconds",
+  "duration_days",
+  "score",
+] as const;
+
+const DIRECTIONS = ["increase", "decrease", "maintain"] as const;
+
+const decimalString = z
+  .string()
+  .trim()
+  .regex(/^-?\d+(\.\d+)?$/, "Enter a number (up to 6 decimal places)");
+
+const optionalDecimal = z.union([z.literal(""), decimalString]).optional();
+
+const optionalCurrency = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z]{3}$/, "Use a 3-letter currency code")
+  .transform((v) => v.toUpperCase())
+  .optional()
+  .or(z.literal(""));
+
+const optionalFrequency = z
+  .union([
+    z.literal(""),
+    z.coerce
+      .number({ invalid_type_error: "Enter a number" })
+      .int("Must be a whole number")
+      .min(1, "Must be at least 1")
+      .max(8760, "Value is too large"),
+  ])
+  .optional();
+
+const optionalDescription = z
+  .string()
+  .trim()
+  .max(2000, "Must be 2000 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+const optionalDataSource = z
+  .string()
+  .trim()
+  .max(500, "Must be 500 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+const optionalOutcome = z.string().uuid().optional().or(z.literal(""));
+const optionalOwner = z.string().uuid().optional().or(z.literal(""));
+
+export const createKPISchema = z
+  .object({
+    outcome_id: optionalOutcome,
+    owner_id: optionalOwner,
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(200, "Must be 200 characters or fewer"),
+    description: optionalDescription,
+    unit: z.enum(UNITS),
+    currency: optionalCurrency,
+    direction: z.enum(DIRECTIONS),
+    baseline_value: optionalDecimal,
+    target_value: optionalDecimal,
+    current_value: optionalDecimal,
+    data_source: optionalDataSource,
+    refresh_frequency_hours: optionalFrequency,
+  })
+  .superRefine((values, ctx) => {
+    if (values.unit === "currency" && !values.currency) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Currency is required for currency-typed KPIs",
+        path: ["currency"],
+      });
+    }
+    if (values.unit !== "currency" && values.currency) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Currency should only be set for currency-typed KPIs",
+        path: ["currency"],
+      });
+    }
+  });
+
+export type CreateKPIFormValues = z.infer<typeof createKPISchema>;
+
+export const editKPISchema = z.object({
+  outcome_id: optionalOutcome,
+  owner_id: optionalOwner,
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(200, "Must be 200 characters or fewer"),
+  description: optionalDescription,
+  direction: z.enum(DIRECTIONS),
+  baseline_value: optionalDecimal,
+  target_value: optionalDecimal,
+  current_value: optionalDecimal,
+  data_source: optionalDataSource,
+  refresh_frequency_hours: optionalFrequency,
+  is_active: z.boolean(),
+});
+
+export type EditKPIFormValues = z.infer<typeof editKPISchema>;
+
+export const KPI_UNIT_OPTIONS = UNITS;
+export const KPI_DIRECTION_OPTIONS = DIRECTIONS;
+
+export function emptyToNull(value: string | undefined | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+```
+
+### frontend/src/features/kpis/useKPIs.ts
+
+```ts
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { kpisApi } from "./kpisApi";
+import type {
+  CreateKPIInput,
+  KPI,
+  KPIListParams,
+  KPIUnit,
+  PaginatedKPIs,
+  UpdateKPIInput,
+} from "./types";
+
+interface UseKPIsOptions {
+  readonly limit: number;
+}
+
+export interface KPIFilters {
+  readonly outcomeId: string | null;
+  readonly ownerId: string | null;
+  readonly units: readonly KPIUnit[];
+  readonly isActive: boolean | null;
+  readonly search: string;
+}
+
+interface UseKPIsResult {
+  readonly data: PaginatedKPIs | null;
+  readonly items: KPI[];
+  readonly filtered: KPI[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly filters: KPIFilters;
+  readonly setOutcomeId: (value: string | null) => void;
+  readonly setOwnerId: (value: string | null) => void;
+  readonly setUnits: (values: readonly KPIUnit[]) => void;
+  readonly setIsActive: (value: boolean | null) => void;
+  readonly setSearch: (value: string) => void;
+  readonly setPage: (page: number) => void;
+  readonly resetFilters: () => void;
+  readonly refresh: () => Promise<void>;
+  readonly createKPI: (input: CreateKPIInput) => Promise<KPI>;
+  readonly updateKPI: (id: string, input: UpdateKPIInput) => Promise<KPI>;
+  readonly deleteKPI: (id: string) => Promise<void>;
+}
+
+const INITIAL_FILTERS: KPIFilters = {
+  outcomeId: null,
+  ownerId: null,
+  units: [],
+  isActive: null,
+  search: "",
+};
+
+export function useKPIs(
+  options: UseKPIsOptions = { limit: 20 },
+): UseKPIsResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedKPIs | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [filters, setFilters] = useState<KPIFilters>(INITIAL_FILTERS);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number, currentFilters: KPIFilters) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: KPIListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+          outcome_id: currentFilters.outcomeId ?? undefined,
+          owner_id: currentFilters.ownerId ?? undefined,
+          unit:
+            currentFilters.units.length > 0 ? currentFilters.units : undefined,
+          is_active:
+            currentFilters.isActive === null
+              ? undefined
+              : currentFilters.isActive,
+        };
+        const result = await kpisApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page, filters);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page, filters]);
+
+  const patchFilters = useCallback((patch: Partial<KPIFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setPage(1);
+  }, []);
+
+  const setOutcomeId = useCallback(
+    (value: string | null) => patchFilters({ outcomeId: value }),
+    [patchFilters],
+  );
+  const setOwnerId = useCallback(
+    (value: string | null) => patchFilters({ ownerId: value }),
+    [patchFilters],
+  );
+  const setUnits = useCallback(
+    (values: readonly KPIUnit[]) => patchFilters({ units: values }),
+    [patchFilters],
+  );
+  const setIsActive = useCallback(
+    (value: boolean | null) => patchFilters({ isActive: value }),
+    [patchFilters],
+  );
+  const setSearch = useCallback(
+    (value: string) => patchFilters({ search: value }),
+    [patchFilters],
+  );
+
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+    setPage(1);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page, filters);
+  }, [load, page, filters]);
+
+  const createKPI = useCallback(
+    async (input: CreateKPIInput) => {
+      setIsMutating(true);
+      try {
+        const created = await kpisApi.create(input);
+        setPage(1);
+        await load(1, filters);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, filters],
+  );
+
+  const updateKPI = useCallback(
+    async (id: string, input: UpdateKPIInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await kpisApi.update(id, input);
+        await load(page, filters);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, filters],
+  );
+
+  const deleteKPI = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await kpisApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage, filters);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page, filters],
+  );
+
+  const items = data?.items ?? [];
+  const term = filters.search.trim().toLowerCase();
+  const filtered =
+    term.length === 0
+      ? items
+      : items.filter((kpi) => {
+          return (
+            kpi.name.toLowerCase().includes(term) ||
+            (kpi.description ?? "").toLowerCase().includes(term) ||
+            (kpi.data_source ?? "").toLowerCase().includes(term)
+          );
+        });
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    items,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setOutcomeId,
+    setOwnerId,
+    setUnits,
+    setIsActive,
+    setSearch,
+    setPage,
+    resetFilters,
+    refresh,
+    createKPI,
+    updateKPI,
+    deleteKPI,
+  };
+}
+```
+
+### frontend/src/features/kpis/useBusinessOutcomeOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { kpisApi } from "./kpisApi";
+import type { KPIOutcomeOption } from "./types";
+
+interface UseBusinessOutcomeOptionsResult {
+  readonly outcomes: KPIOutcomeOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useBusinessOutcomeOptions(): UseBusinessOutcomeOptionsResult {
+  const [outcomes, setOutcomes] = useState<KPIOutcomeOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await kpisApi.listOutcomes();
+        if (!cancelled) setOutcomes(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { outcomes, isLoading, error };
+}
+```
+
+### frontend/src/features/kpis/useOwnerOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { kpisApi } from "./kpisApi";
+import type { KPIOwnerOption } from "./types";
+
+interface UseOwnerOptionsResult {
+  readonly owners: KPIOwnerOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useOwnerOptions(): UseOwnerOptionsResult {
+  const [owners, setOwners] = useState<KPIOwnerOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await kpisApi.listOwners();
+        if (!cancelled) setOwners(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { owners, isLoading, error };
+}
+```
+
+### frontend/src/features/kpis/components/KPIStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+import type { KPI, KPIDirection, KPIHealth } from "../types";
+
+const HEALTH_STYLES: Record<KPIHealth, string> = {
+  on_track:
+    "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  at_risk:
+    "border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  off_track:
+    "border border-destructive/40 bg-destructive/10 text-destructive",
+  achieved:
+    "border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+};
+
+const HEALTH_LABELS: Record<KPIHealth, string> = {
+  on_track: "On Track",
+  at_risk: "At Risk",
+  off_track: "Off Track",
+  achieved: "Achieved",
+};
+
+function toNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function withinTolerance(
+  current: number,
+  baseline: number,
+  tolerance = 0.05,
+): boolean {
+  if (baseline === 0) return current === 0;
+  return Math.abs(current - baseline) <= Math.abs(baseline) * tolerance;
+}
+
+export function deriveKPIHealth(kpi: KPI): KPIHealth {
+  const baseline = toNumber(kpi.baseline_value);
+  const target = toNumber(kpi.target_value);
+  const current = toNumber(kpi.current_value);
+  const direction: KPIDirection = kpi.direction;
+
+  if (!kpi.is_active) {
+    return "off_track";
+  }
+  if (current === null) {
+    return "at_risk";
+  }
+  if (target !== null) {
+    if (direction === "increase" && current >= target) return "achieved";
+    if (direction === "decrease" && current <= target) return "achieved";
+    if (direction === "maintain" && baseline !== null) {
+      if (withinTolerance(current, baseline, 0.02)) return "achieved";
+    }
+  }
+  if (baseline === null || target === null) {
+    return "at_risk";
+  }
+
+  const span = target - baseline;
+  if (span === 0) {
+    if (direction === "maintain" && withinTolerance(current, baseline)) {
+      return "on_track";
+    }
+    return "at_risk";
+  }
+  const progress = (current - baseline) / span;
+  if (direction === "increase") {
+    if (progress >= 0.9) return "on_track";
+    if (progress >= 0.5) return "at_risk";
+    return "off_track";
+  }
+  if (direction === "decrease") {
+    if (progress >= 0.9) return "on_track";
+    if (progress >= 0.5) return "at_risk";
+    return "off_track";
+  }
+  return withinTolerance(current, baseline) ? "on_track" : "at_risk";
+}
+
+interface KPIStatusBadgeProps {
+  readonly kpi: KPI;
+}
+
+export function KPIStatusBadge({ kpi }: KPIStatusBadgeProps) {
+  const health = deriveKPIHealth(kpi);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        HEALTH_STYLES[health],
+      )}
+    >
+      {HEALTH_LABELS[health]}
+    </span>
+  );
+}
+
+export { HEALTH_LABELS };
+```
+
+### frontend/src/features/kpis/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/KPIFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+
+import type {
+  KPIOutcomeOption,
+  KPIOwnerOption,
+  KPIUnit,
+} from "../types";
+import { KPI_UNIT_OPTIONS } from "../kpiSchemas";
+
+const UNIT_LABELS: Record<KPIUnit, string> = {
+  currency: "Currency",
+  percent: "Percent",
+  count: "Number",
+  ratio: "Ratio",
+  duration_seconds: "Duration (seconds)",
+  duration_days: "Duration (days)",
+  score: "Score",
+};
+
+interface KPIFiltersProps {
+  readonly outcomes: KPIOutcomeOption[];
+  readonly owners: KPIOwnerOption[];
+  readonly isLoadingOutcomes: boolean;
+  readonly isLoadingOwners: boolean;
+  readonly outcomeId: string | null;
+  readonly ownerId: string | null;
+  readonly units: readonly KPIUnit[];
+  readonly isActive: boolean | null;
+  readonly search: string;
+  readonly onOutcomeChange: (value: string | null) => void;
+  readonly onOwnerChange: (value: string | null) => void;
+  readonly onUnitChange: (value: KPIUnit | "") => void;
+  readonly onActiveChange: (value: boolean | null) => void;
+  readonly onSearchChange: (value: string) => void;
+  readonly onReset: () => void;
+}
+
+export function KPIFilters({
+  outcomes,
+  owners,
+  isLoadingOutcomes,
+  isLoadingOwners,
+  outcomeId,
+  ownerId,
+  units,
+  isActive,
+  search,
+  onOutcomeChange,
+  onOwnerChange,
+  onUnitChange,
+  onActiveChange,
+  onSearchChange,
+  onReset,
+}: KPIFiltersProps) {
+  const activeUnit = units[0] ?? "";
+  const activeStatus =
+    isActive === null ? "" : isActive ? "active" : "inactive";
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-2">
+          <Label htmlFor="kpi-outcome">Business outcome</Label>
+          <select
+            id="kpi-outcome"
+            value={outcomeId ?? ""}
+            onChange={(event) =>
+              onOutcomeChange(event.target.value ? event.target.value : null)
+            }
+            disabled={isLoadingOutcomes}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingOutcomes ? "Loading…" : "All outcomes"}
+            </option>
+            {outcomes.map((outcome) => (
+              <option key={outcome.id} value={outcome.id}>
+                {outcome.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-owner">Owner</Label>
+          <select
+            id="kpi-owner"
+            value={ownerId ?? ""}
+            onChange={(event) =>
+              onOwnerChange(event.target.value ? event.target.value : null)
+            }
+            disabled={isLoadingOwners}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingOwners ? "Loading…" : "All owners"}
+            </option>
+            {owners.map((owner) => (
+              <option key={owner.id} value={owner.id}>
+                {owner.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-unit">Unit / Metric type</Label>
+          <select
+            id="kpi-unit"
+            value={activeUnit}
+            onChange={(event) =>
+              onUnitChange(event.target.value as KPIUnit | "")
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All types</option>
+            {KPI_UNIT_OPTIONS.map((unit) => (
+              <option key={unit} value={unit}>
+                {UNIT_LABELS[unit]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-active">Status</Label>
+          <select
+            id="kpi-active"
+            value={activeStatus}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "") onActiveChange(null);
+              else if (value === "active") onActiveChange(true);
+              else onActiveChange(false);
+            }}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-md">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            placeholder="Search by name, description, or source…"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            className="pl-9"
+            aria-label="Search KPIs"
+          />
+        </div>
+        <Button type="button" variant="outline" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/KPIsTable.tsx
+
+```tsx
+import { Pencil, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type {
+  KPI,
+  KPIOutcomeOption,
+  KPIOwnerOption,
+  KPIUnit,
+} from "../types";
+import { KPIStatusBadge } from "./KPIStatusBadge";
+
+interface KPIsTableProps {
+  readonly kpis: KPI[];
+  readonly outcomes: KPIOutcomeOption[];
+  readonly owners: KPIOwnerOption[];
+  readonly isMutating: boolean;
+  readonly onEdit: (kpi: KPI) => void;
+  readonly onDelete: (kpi: KPI) => void;
+}
+
+function toNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatValue(
+  value: string | number | null | undefined,
+  unit: KPIUnit,
+  currency: string | null,
+): string {
+  const parsed = toNumber(value);
+  if (parsed === null) return "—";
+  if (unit === "currency") {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currency ?? "USD",
+        maximumFractionDigits: 2,
+      }).format(parsed);
+    } catch {
+      return `${parsed.toLocaleString()} ${currency ?? ""}`.trim();
+    }
+  }
+  if (unit === "percent") {
+    return `${parsed.toLocaleString(undefined, {
+      maximumFractionDigits: 2,
+    })}%`;
+  }
+  if (unit === "duration_seconds") {
+    return `${parsed.toLocaleString()} s`;
+  }
+  if (unit === "duration_days") {
+    return `${parsed.toLocaleString()} d`;
+  }
+  return parsed.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function formatFrequency(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  if (value >= 24 * 90) return "Quarterly";
+  if (value >= 24 * 28) return "Monthly";
+  if (value >= 24 * 7) return "Weekly";
+  if (value >= 24) return "Daily";
+  return `${value}h`;
+}
+
+export function KPIsTable({
+  kpis,
+  outcomes,
+  owners,
+  isMutating,
+  onEdit,
+  onDelete,
+}: KPIsTableProps) {
+  const outcomeMap = new Map(
+    outcomes.map((outcome) => [outcome.id, outcome.name]),
+  );
+  const ownerMap = new Map(owners.map((owner) => [owner.id, owner.full_name]));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                KPI
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Business outcome
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Owner
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Current
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Target
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Refresh
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {kpis.map((kpi) => (
+              <tr
+                key={kpi.id}
+                className={cn(
+                  "transition-colors hover:bg-muted/30",
+                  !kpi.is_active && "opacity-70",
+                )}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">
+                      {kpi.name}
+                    </span>
+                    {kpi.description && (
+                      <span className="line-clamp-1 text-xs text-muted-foreground">
+                        {kpi.description}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {kpi.outcome_id
+                    ? outcomeMap.get(kpi.outcome_id) ?? "—"
+                    : "Organization-wide"}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {kpi.owner_id
+                    ? ownerMap.get(kpi.owner_id) ?? "—"
+                    : "Unassigned"}
+                </td>
+                <td className="px-4 py-3 text-foreground">
+                  {formatValue(kpi.current_value, kpi.unit, kpi.currency)}
+                </td>
+                <td className="px-4 py-3 text-foreground">
+                  {formatValue(kpi.target_value, kpi.unit, kpi.currency)}
+                </td>
+                <td className="px-4 py-3">
+                  <KPIStatusBadge kpi={kpi} />
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatFrequency(kpi.refresh_frequency_hours)}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${kpi.name}`}
+                      onClick={() => onEdit(kpi)}
+                      disabled={isMutating}
+                      title="Edit KPI"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${kpi.name}`}
+                      onClick={() => onDelete(kpi)}
+                      disabled={isMutating}
+                      title="Delete KPI"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/CreateKPIDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  KPI_DIRECTION_OPTIONS,
+  KPI_UNIT_OPTIONS,
+  createKPISchema,
+  emptyToNull,
+  type CreateKPIFormValues,
+} from "../kpiSchemas";
+import type {
+  CreateKPIInput,
+  KPIDirection,
+  KPIOutcomeOption,
+  KPIOwnerOption,
+  KPIUnit,
+} from "../types";
+import { Modal } from "./Modal";
+
+interface CreateKPIDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateKPIInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly outcomes: KPIOutcomeOption[];
+  readonly owners: KPIOwnerOption[];
+  readonly outcomesLoading: boolean;
+  readonly ownersLoading: boolean;
+  readonly defaultOutcomeId: string | null;
+}
+
+const UNIT_LABELS: Record<KPIUnit, string> = {
+  currency: "Currency",
+  percent: "Percent",
+  count: "Number",
+  ratio: "Ratio",
+  duration_seconds: "Duration (seconds)",
+  duration_days: "Duration (days)",
+  score: "Score",
+};
+
+const DIRECTION_LABELS: Record<KPIDirection, string> = {
+  increase: "Increase",
+  decrease: "Decrease",
+  maintain: "Maintain",
+};
+
+function frequencyValue(
+  refreshHours: number | undefined,
+): number | undefined {
+  return typeof refreshHours === "number" ? refreshHours : undefined;
+}
+
+export function CreateKPIDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  outcomes,
+  owners,
+  outcomesLoading,
+  ownersLoading,
+  defaultOutcomeId,
+}: CreateKPIDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateKPIFormValues>({
+    resolver: zodResolver(createKPISchema),
+    defaultValues: {
+      outcome_id: defaultOutcomeId ?? "",
+      owner_id: "",
+      name: "",
+      description: "",
+      unit: "count",
+      currency: "",
+      direction: "increase",
+      baseline_value: "",
+      target_value: "",
+      current_value: "",
+      data_source: "",
+      refresh_frequency_hours: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      outcome_id: defaultOutcomeId ?? "",
+      owner_id: "",
+      name: "",
+      description: "",
+      unit: "count",
+      currency: "",
+      direction: "increase",
+      baseline_value: "",
+      target_value: "",
+      current_value: "",
+      data_source: "",
+      refresh_frequency_hours: "",
+    });
+  }, [open, defaultOutcomeId, reset]);
+
+  const watchedUnit = watch("unit");
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const refresh = frequencyValue(
+        typeof values.refresh_frequency_hours === "number"
+          ? values.refresh_frequency_hours
+          : undefined,
+      );
+      const input: CreateKPIInput = {
+        outcome_id: values.outcome_id ? values.outcome_id : null,
+        owner_id: values.owner_id ? values.owner_id : null,
+        name: values.name.trim(),
+        description: emptyToNull(values.description),
+        unit: values.unit,
+        currency: values.unit === "currency" ? emptyToNull(values.currency) : null,
+        direction: values.direction,
+        baseline_value: emptyToNull(values.baseline_value),
+        target_value: emptyToNull(values.target_value),
+        current_value: emptyToNull(values.current_value),
+        data_source: emptyToNull(values.data_source),
+        refresh_frequency_hours: refresh ?? null,
+      };
+      await onSubmit(input);
+      toast({ title: "KPI created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create KPI",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create KPI"
+      description="Define a measurable indicator tied to a business outcome."
+      maxWidthClassName="max-w-2xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-outcome">Business outcome</Label>
+            <select
+              id="kpi-create-outcome"
+              {...register("outcome_id")}
+              disabled={outcomesLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {outcomesLoading ? "Loading…" : "Organization-wide"}
+              </option>
+              {outcomes.map((outcome) => (
+                <option key={outcome.id} value={outcome.id}>
+                  {outcome.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-owner">Owner</Label>
+            <select
+              id="kpi-create-owner"
+              {...register("owner_id")}
+              disabled={ownersLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {ownersLoading ? "Loading…" : "Unassigned"}
+              </option>
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-create-name">Name</Label>
+          <Input
+            id="kpi-create-name"
+            placeholder="e.g. Monthly Active Users"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-create-description">Description</Label>
+          <textarea
+            id="kpi-create-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="How is this metric defined and computed?"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-unit">Metric type</Label>
+            <select
+              id="kpi-create-unit"
+              {...register("unit")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {KPI_UNIT_OPTIONS.map((unit) => (
+                <option key={unit} value={unit}>
+                  {UNIT_LABELS[unit]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-direction">Direction</Label>
+            <select
+              id="kpi-create-direction"
+              {...register("direction")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {KPI_DIRECTION_OPTIONS.map((direction) => (
+                <option key={direction} value={direction}>
+                  {DIRECTION_LABELS[direction]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-currency">Currency</Label>
+            <Input
+              id="kpi-create-currency"
+              placeholder="USD"
+              maxLength={3}
+              disabled={watchedUnit !== "currency"}
+              {...register("currency")}
+              aria-invalid={Boolean(errors.currency)}
+            />
+            {errors.currency && (
+              <p className="text-xs text-destructive">
+                {errors.currency.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-baseline">Baseline value</Label>
+            <Input
+              id="kpi-create-baseline"
+              inputMode="decimal"
+              placeholder="e.g. 1000"
+              {...register("baseline_value")}
+              aria-invalid={Boolean(errors.baseline_value)}
+            />
+            {errors.baseline_value && (
+              <p className="text-xs text-destructive">
+                {errors.baseline_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-target">Target value</Label>
+            <Input
+              id="kpi-create-target"
+              inputMode="decimal"
+              placeholder="e.g. 1500"
+              {...register("target_value")}
+              aria-invalid={Boolean(errors.target_value)}
+            />
+            {errors.target_value && (
+              <p className="text-xs text-destructive">
+                {errors.target_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-current">Current value</Label>
+            <Input
+              id="kpi-create-current"
+              inputMode="decimal"
+              placeholder="e.g. 1150"
+              {...register("current_value")}
+              aria-invalid={Boolean(errors.current_value)}
+            />
+            {errors.current_value && (
+              <p className="text-xs text-destructive">
+                {errors.current_value.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-source">Data source</Label>
+            <Input
+              id="kpi-create-source"
+              placeholder="e.g. analytics.mau_daily"
+              {...register("data_source")}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-create-frequency">
+              Refresh frequency (hours)
+            </Label>
+            <Input
+              id="kpi-create-frequency"
+              type="number"
+              min={1}
+              step={1}
+              placeholder="24"
+              {...register("refresh_frequency_hours")}
+              aria-invalid={Boolean(errors.refresh_frequency_hours)}
+            />
+            {errors.refresh_frequency_hours && (
+              <p className="text-xs text-destructive">
+                {errors.refresh_frequency_hours.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create KPI"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/EditKPIDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  KPI_DIRECTION_OPTIONS,
+  editKPISchema,
+  emptyToNull,
+  type EditKPIFormValues,
+} from "../kpiSchemas";
+import type {
+  KPI,
+  KPIDirection,
+  KPIOutcomeOption,
+  KPIOwnerOption,
+  UpdateKPIInput,
+} from "../types";
+import { Modal } from "./Modal";
+
+interface EditKPIDialogProps {
+  readonly open: boolean;
+  readonly kpi: KPI | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: UpdateKPIInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly outcomes: KPIOutcomeOption[];
+  readonly owners: KPIOwnerOption[];
+  readonly outcomesLoading: boolean;
+  readonly ownersLoading: boolean;
+}
+
+const DIRECTION_LABELS: Record<KPIDirection, string> = {
+  increase: "Increase",
+  decrease: "Decrease",
+  maintain: "Maintain",
+};
+
+function toStringOrEmpty(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+export function EditKPIDialog({
+  open,
+  kpi,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  outcomes,
+  owners,
+  outcomesLoading,
+  ownersLoading,
+}: EditKPIDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditKPIFormValues>({
+    resolver: zodResolver(editKPISchema),
+    defaultValues: {
+      outcome_id: "",
+      owner_id: "",
+      name: "",
+      description: "",
+      direction: "increase",
+      baseline_value: "",
+      target_value: "",
+      current_value: "",
+      data_source: "",
+      refresh_frequency_hours: "",
+      is_active: true,
+    },
+  });
+
+  useEffect(() => {
+    if (open && kpi) {
+      reset({
+        outcome_id: kpi.outcome_id ?? "",
+        owner_id: kpi.owner_id ?? "",
+        name: kpi.name,
+        description: kpi.description ?? "",
+        direction: kpi.direction,
+        baseline_value: toStringOrEmpty(kpi.baseline_value),
+        target_value: toStringOrEmpty(kpi.target_value),
+        current_value: toStringOrEmpty(kpi.current_value),
+        data_source: kpi.data_source ?? "",
+        refresh_frequency_hours: toStringOrEmpty(kpi.refresh_frequency_hours),
+        is_active: kpi.is_active,
+      });
+    }
+  }, [open, kpi, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!kpi) return;
+    try {
+      const refresh =
+        typeof values.refresh_frequency_hours === "number"
+          ? values.refresh_frequency_hours
+          : null;
+      const input: UpdateKPIInput = {
+        outcome_id: values.outcome_id ? values.outcome_id : null,
+        owner_id: values.owner_id ? values.owner_id : null,
+        name: values.name.trim(),
+        description: emptyToNull(values.description),
+        direction: values.direction,
+        baseline_value: emptyToNull(values.baseline_value),
+        target_value: emptyToNull(values.target_value),
+        current_value: emptyToNull(values.current_value),
+        data_source: emptyToNull(values.data_source),
+        refresh_frequency_hours: refresh,
+        is_active: values.is_active,
+      };
+      await onSubmit(kpi.id, input);
+      toast({ title: "KPI updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update KPI",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && kpi !== null}
+      onClose={onClose}
+      title={`Edit ${kpi?.name ?? "KPI"}`}
+      description={kpi ? `Metric type: ${kpi.unit}` : undefined}
+      maxWidthClassName="max-w-2xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-outcome">Business outcome</Label>
+            <select
+              id="kpi-edit-outcome"
+              {...register("outcome_id")}
+              disabled={outcomesLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {outcomesLoading ? "Loading…" : "Organization-wide"}
+              </option>
+              {outcomes.map((outcome) => (
+                <option key={outcome.id} value={outcome.id}>
+                  {outcome.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-owner">Owner</Label>
+            <select
+              id="kpi-edit-owner"
+              {...register("owner_id")}
+              disabled={ownersLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {ownersLoading ? "Loading…" : "Unassigned"}
+              </option>
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-edit-name">Name</Label>
+          <Input
+            id="kpi-edit-name"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kpi-edit-description">Description</Label>
+          <textarea
+            id="kpi-edit-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-direction">Direction</Label>
+            <select
+              id="kpi-edit-direction"
+              {...register("direction")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {KPI_DIRECTION_OPTIONS.map((direction) => (
+                <option key={direction} value={direction}>
+                  {DIRECTION_LABELS[direction]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-baseline">Baseline value</Label>
+            <Input
+              id="kpi-edit-baseline"
+              inputMode="decimal"
+              {...register("baseline_value")}
+              aria-invalid={Boolean(errors.baseline_value)}
+            />
+            {errors.baseline_value && (
+              <p className="text-xs text-destructive">
+                {errors.baseline_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-target">Target value</Label>
+            <Input
+              id="kpi-edit-target"
+              inputMode="decimal"
+              {...register("target_value")}
+              aria-invalid={Boolean(errors.target_value)}
+            />
+            {errors.target_value && (
+              <p className="text-xs text-destructive">
+                {errors.target_value.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-current">Current value</Label>
+            <Input
+              id="kpi-edit-current"
+              inputMode="decimal"
+              {...register("current_value")}
+              aria-invalid={Boolean(errors.current_value)}
+            />
+            {errors.current_value && (
+              <p className="text-xs text-destructive">
+                {errors.current_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-source">Data source</Label>
+            <Input id="kpi-edit-source" {...register("data_source")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kpi-edit-frequency">Refresh (hours)</Label>
+            <Input
+              id="kpi-edit-frequency"
+              type="number"
+              min={1}
+              step={1}
+              {...register("refresh_frequency_hours")}
+              aria-invalid={Boolean(errors.refresh_frequency_hours)}
+            />
+            {errors.refresh_frequency_hours && (
+              <p className="text-xs text-destructive">
+                {errors.refresh_frequency_hours.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring"
+            {...register("is_active")}
+          />
+          Active
+        </label>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/DeleteKPIDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { KPI } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteKPIDialogProps {
+  readonly open: boolean;
+  readonly kpi: KPI | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteKPIDialog({
+  open,
+  kpi,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteKPIDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!kpi) return;
+    try {
+      await onConfirm(kpi.id);
+      toast({ title: "KPI deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete KPI",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && kpi !== null}
+      onClose={onClose}
+      title="Delete KPI"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {kpi ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{kpi.name}</span>.
+                </>
+              ) : (
+                "KPI details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !kpi}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete KPI"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/KPIsLoadingState.tsx
+
+```tsx
+export function KPIsLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/kpis/components/KPIsErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface KPIsErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function KPIsErrorState({ message, onRetry }: KPIsErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">Failed to load KPIs</h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/kpis/index.ts
+
+```ts
+export { kpisApi } from "./kpisApi";
+export { useKPIs } from "./useKPIs";
+export { useBusinessOutcomeOptions } from "./useBusinessOutcomeOptions";
+export { useOwnerOptions } from "./useOwnerOptions";
+export type {
+  CreateKPIInput,
+  KPI,
+  KPIDirection,
+  KPIHealth,
+  KPIListParams,
+  KPIOutcomeOption,
+  KPIOwnerOption,
+  KPIUnit,
+  PaginatedKPIs,
+  UpdateKPIInput,
+} from "./types";
+export { CreateKPIDialog } from "./components/CreateKPIDialog";
+export { DeleteKPIDialog } from "./components/DeleteKPIDialog";
+export { EditKPIDialog } from "./components/EditKPIDialog";
+export { KPIFilters } from "./components/KPIFilters";
+export { KPIStatusBadge } from "./components/KPIStatusBadge";
+export { KPIsErrorState } from "./components/KPIsErrorState";
+export { KPIsLoadingState } from "./components/KPIsLoadingState";
+export { KPIsTable } from "./components/KPIsTable";
+export { Modal as KPIModal } from "./components/Modal";
+export { Pagination as KPIsPagination } from "./components/Pagination";
+```
+
+### frontend/src/pages/kpis/KPIsPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  CreateKPIDialog,
+  DeleteKPIDialog,
+  EditKPIDialog,
+  KPIFilters,
+  KPIsErrorState,
+  KPIsLoadingState,
+  KPIsPagination,
+  KPIsTable,
+  useBusinessOutcomeOptions,
+  useKPIs,
+  useOwnerOptions,
+  type KPI,
+  type KPIUnit,
+} from "@/features/kpis";
+
+const PAGE_SIZE = 20;
+
+export default function KPIsPage() {
+  const {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setOutcomeId,
+    setOwnerId,
+    setUnits,
+    setIsActive,
+    setSearch,
+    setPage,
+    resetFilters,
+    refresh,
+    createKPI,
+    updateKPI,
+    deleteKPI,
+  } = useKPIs({ limit: PAGE_SIZE });
+
+  const {
+    outcomes,
+    isLoading: outcomesLoading,
+  } = useBusinessOutcomeOptions();
+  const { owners, isLoading: ownersLoading } = useOwnerOptions();
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<KPI | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<KPI | null>(null);
+
+  const handleUnit = (value: KPIUnit | "") => {
+    setUnits(value ? [value] : []);
+  };
+
+  const totalCount = data?.total ?? 0;
+  const hasResults = filtered.length > 0;
+  const filtersActive =
+    filters.search.trim().length > 0 ||
+    filters.outcomeId !== null ||
+    filters.ownerId !== null ||
+    filters.units.length > 0 ||
+    filters.isActive !== null;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">KPIs</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track the indicators that measure business outcome performance.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New KPI
+        </Button>
+      </header>
+
+      <KPIFilters
+        outcomes={outcomes}
+        owners={owners}
+        isLoadingOutcomes={outcomesLoading}
+        isLoadingOwners={ownersLoading}
+        outcomeId={filters.outcomeId}
+        ownerId={filters.ownerId}
+        units={filters.units}
+        isActive={filters.isActive}
+        search={filters.search}
+        onOutcomeChange={setOutcomeId}
+        onOwnerChange={setOwnerId}
+        onUnitChange={handleUnit}
+        onActiveChange={setIsActive}
+        onSearchChange={setSearch}
+        onReset={resetFilters}
+      />
+
+      {isLoading && !data ? (
+        <KPIsLoadingState />
+      ) : error ? (
+        <KPIsErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            filtersActive ? "No KPIs match your filters" : "No KPIs yet"
+          }
+          description={
+            filtersActive
+              ? "Try broadening the search or clearing filters."
+              : "Create your first KPI to start measuring business outcome progress."
+          }
+          action={
+            <div className="flex items-center gap-2">
+              {filtersActive && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetFilters}
+                >
+                  Reset filters
+                </Button>
+              )}
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New KPI
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <KPIsTable
+            kpis={filtered}
+            outcomes={outcomes}
+            owners={owners}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+          />
+          <KPIsPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateKPIDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createKPI(input);
+        }}
+        isSubmitting={isMutating}
+        outcomes={outcomes}
+        owners={owners}
+        outcomesLoading={outcomesLoading}
+        ownersLoading={ownersLoading}
+        defaultOutcomeId={filters.outcomeId}
+      />
+
+      <EditKPIDialog
+        open={editTarget !== null}
+        kpi={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateKPI(id, input);
+        }}
+        isSubmitting={isMutating}
+        outcomes={outcomes}
+        owners={owners}
+        outcomesLoading={outcomesLoading}
+        ownersLoading={ownersLoading}
+      />
+
+      <DeleteKPIDialog
+        open={deleteTarget !== null}
+        kpi={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteKPI(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `KPIsPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const KPIsPage = lazy(() => import("@/pages/kpis/KPIsPage"));
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.KPIS}
+  element={<ModulePlaceholder title="KPIs" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.KPIS} element={<KPIsPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.

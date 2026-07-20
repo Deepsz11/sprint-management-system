@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_dVv0fkSqOX8QeN2nWbQ1B_cOsZqN2Y1V5M0h9bLCdp4",
+    api_key="sk_gbPW8aPl-pdgxx9KcEyb10AbObx_XomGU2IlE9T8INk",
 )
 
 model = "claude-opus-4-7"
@@ -97,16 +97,15 @@ The application already has fully working modules:
 - Projects
 - Sprints
 - Work Items
-
-Do NOT modify or regenerate any existing shared files.
+- Business Outcomes
 
 ====================================================
 STRICT RULES
 ====================================================
 
-Never overwrite, regenerate, delete or reformat existing files.
+Never modify, overwrite, regenerate, delete or reformat existing shared files.
 
-Especially DO NOT touch:
+DO NOT touch:
 
 src/router/*
 src/components/layout/*
@@ -134,60 +133,76 @@ Return ONLY newly created files.
 TASK
 ====================================================
 
-Generate a complete Business Outcomes module.
+Generate a complete KPIs module.
 
 Create ONLY these files:
 
-src/features/business-outcomes/
+src/features/kpis/
     types.ts
-    businessOutcomesApi.ts
-    businessOutcomeSchemas.ts
-    useBusinessOutcomes.ts
-    useProjectOptions.ts
-    useKpiOptions.ts
+    kpisApi.ts
+    kpiSchemas.ts
+    useKPIs.ts
+    useBusinessOutcomeOptions.ts
+    useOwnerOptions.ts
 
-src/features/business-outcomes/components/
-    BusinessOutcomesTable.tsx
-    BusinessOutcomeFilters.tsx
-    BusinessOutcomeStatusBadge.tsx
+src/features/kpis/components/
+    KPIsTable.tsx
+    KPIFilters.tsx
+    KPIStatusBadge.tsx
     Pagination.tsx
     Modal.tsx
-    CreateBusinessOutcomeDialog.tsx
-    EditBusinessOutcomeDialog.tsx
-    DeleteBusinessOutcomeDialog.tsx
-    BusinessOutcomesLoadingState.tsx
-    BusinessOutcomesErrorState.tsx
+    CreateKPIDialog.tsx
+    EditKPIDialog.tsx
+    DeleteKPIDialog.tsx
+    KPIsLoadingState.tsx
+    KPIsErrorState.tsx
 
-src/features/business-outcomes/index.ts
+src/features/kpis/index.ts
 
-src/pages/business-outcomes/BusinessOutcomesPage.tsx
+src/pages/kpis/KPIsPage.tsx
 
 ====================================================
-BUSINESS OUTCOME MODEL
+KPI MODEL
 ====================================================
 
-Each Business Outcome contains:
+Each KPI contains:
 
 - id
-- title
+- name
 - description
-- projectId
+- businessOutcomeId
 - ownerId
-- status
+- metricType
 - targetValue
 - currentValue
 - unit
+- status
+- reportingFrequency
+- startDate
 - targetDate
 - createdAt
 - updatedAt
 
-Status values:
+Status:
 
-- Planned
-- In Progress
+- On Track
 - At Risk
+- Off Track
 - Achieved
-- Cancelled
+
+Metric Types:
+
+- Number
+- Percentage
+- Currency
+- Duration
+
+Reporting Frequency:
+
+- Daily
+- Weekly
+- Monthly
+- Quarterly
 
 ====================================================
 PAGE FEATURES
@@ -201,8 +216,8 @@ Implement:
 ✔ Loading state
 ✔ Empty state
 ✔ Error state
-✔ Create dialog
-✔ Edit dialog
+✔ Create KPI dialog
+✔ Edit KPI dialog
 ✔ Delete confirmation dialog
 
 ====================================================
@@ -211,12 +226,12 @@ TABLE
 
 Columns:
 
-- Title
-- Project
+- KPI Name
+- Business Outcome
 - Owner
-- Status
-- Current Progress
+- Current Value
 - Target Value
+- Status
 - Target Date
 - Actions
 
@@ -229,11 +244,12 @@ Actions:
 API
 ====================================================
 
-Follow the exact same architecture and coding style used by:
+Follow the exact same architecture and coding style already used by:
 
 - Projects
 - Sprints
 - Work Items
+- Business Outcomes
 
 Do NOT invent a different architecture.
 
@@ -241,12 +257,11 @@ Do NOT invent a different architecture.
 OUTPUT FORMAT
 ====================================================
 
-Return ONLY new files.
+Return ONLY newly created files.
 
-Do NOT regenerate existing files.
+Never regenerate existing files.
 
-If AppRouter.tsx requires modification,
-output ONLY:
+If AppRouter.tsx requires modification, output ONLY:
 
 MANUAL ROUTER PATCH
 
