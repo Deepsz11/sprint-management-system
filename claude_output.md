@@ -31925,3 +31925,1497 @@ with:
 ```
 
 No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/organizations/types.ts
+
+```ts
+export interface Organization {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly description: string | null;
+  readonly billing_email: string | null;
+  readonly is_active: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface PaginatedOrganizations {
+  readonly items: Organization[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CreateOrganizationInput {
+  readonly name: string;
+  readonly slug: string;
+  readonly description?: string | null;
+  readonly billing_email?: string | null;
+}
+
+export interface UpdateOrganizationInput {
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly billing_email?: string | null;
+  readonly is_active?: boolean;
+}
+
+export interface OrganizationListParams {
+  readonly limit: number;
+  readonly offset: number;
+}
+```
+
+### frontend/src/features/organizations/organizationsApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  CreateOrganizationInput,
+  Organization,
+  OrganizationListParams,
+  PaginatedOrganizations,
+  UpdateOrganizationInput,
+} from "./types";
+
+export const organizationsApi = {
+  async list(
+    params: OrganizationListParams,
+  ): Promise<PaginatedOrganizations> {
+    const response = await apiClient.get<PaginatedOrganizations>(
+      API_ENDPOINTS.ORGANIZATIONS,
+      {
+        params: {
+          limit: params.limit,
+          offset: params.offset,
+        },
+      },
+    );
+    return response.data;
+  },
+
+  async get(id: string): Promise<Organization> {
+    const response = await apiClient.get<Organization>(
+      `${API_ENDPOINTS.ORGANIZATIONS}/${id}`,
+    );
+    return response.data;
+  },
+
+  async create(input: CreateOrganizationInput): Promise<Organization> {
+    const response = await apiClient.post<Organization>(
+      API_ENDPOINTS.ORGANIZATIONS,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(
+    id: string,
+    input: UpdateOrganizationInput,
+  ): Promise<Organization> {
+    const response = await apiClient.patch<Organization>(
+      `${API_ENDPOINTS.ORGANIZATIONS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.ORGANIZATIONS}/${id}`);
+  },
+};
+```
+
+### frontend/src/features/organizations/organizationSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const optionalDescription = z
+  .string()
+  .trim()
+  .max(2000, "Description must be 2000 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+const optionalEmail = z
+  .string()
+  .trim()
+  .email("Enter a valid email address")
+  .max(320, "Email is too long")
+  .optional()
+  .or(z.literal(""));
+
+export const createOrganizationSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(200, "Name must be 200 characters or fewer"),
+  slug: z
+    .string()
+    .trim()
+    .min(2, "Slug must be between 2 and 64 characters")
+    .max(64, "Slug must be between 2 and 64 characters")
+    .regex(slugRegex, "Use lowercase letters, digits, and hyphens only"),
+  description: optionalDescription,
+  billing_email: optionalEmail,
+});
+
+export type CreateOrganizationFormValues = z.infer<
+  typeof createOrganizationSchema
+>;
+
+export const editOrganizationSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(200, "Name must be 200 characters or fewer"),
+  description: optionalDescription,
+  billing_email: optionalEmail,
+  is_active: z.boolean(),
+});
+
+export type EditOrganizationFormValues = z.infer<
+  typeof editOrganizationSchema
+>;
+
+export function emptyToNull(value: string | undefined | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+export function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+```
+
+### frontend/src/features/organizations/useOrganizations.ts
+
+```ts
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { organizationsApi } from "./organizationsApi";
+import type {
+  CreateOrganizationInput,
+  Organization,
+  OrganizationListParams,
+  PaginatedOrganizations,
+  UpdateOrganizationInput,
+} from "./types";
+
+interface UseOrganizationsOptions {
+  readonly limit: number;
+}
+
+export interface OrganizationFilters {
+  readonly search: string;
+  readonly status: "all" | "active" | "inactive";
+}
+
+interface UseOrganizationsResult {
+  readonly data: PaginatedOrganizations | null;
+  readonly items: Organization[];
+  readonly filtered: Organization[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly filters: OrganizationFilters;
+  readonly setSearch: (value: string) => void;
+  readonly setStatus: (value: OrganizationFilters["status"]) => void;
+  readonly setPage: (page: number) => void;
+  readonly resetFilters: () => void;
+  readonly refresh: () => Promise<void>;
+  readonly createOrganization: (
+    input: CreateOrganizationInput,
+  ) => Promise<Organization>;
+  readonly updateOrganization: (
+    id: string,
+    input: UpdateOrganizationInput,
+  ) => Promise<Organization>;
+  readonly deleteOrganization: (id: string) => Promise<void>;
+}
+
+const INITIAL_FILTERS: OrganizationFilters = {
+  search: "",
+  status: "all",
+};
+
+export function useOrganizations(
+  options: UseOrganizationsOptions = { limit: 20 },
+): UseOrganizationsResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedOrganizations | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [filters, setFilters] = useState<OrganizationFilters>(INITIAL_FILTERS);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: OrganizationListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+        };
+        const result = await organizationsApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page]);
+
+  const setSearch = useCallback((value: string) => {
+    setFilters((current) => ({ ...current, search: value }));
+  }, []);
+
+  const setStatus = useCallback((value: OrganizationFilters["status"]) => {
+    setFilters((current) => ({ ...current, status: value }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page);
+  }, [load, page]);
+
+  const createOrganization = useCallback(
+    async (input: CreateOrganizationInput) => {
+      setIsMutating(true);
+      try {
+        const created = await organizationsApi.create(input);
+        setPage(1);
+        await load(1);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load],
+  );
+
+  const updateOrganization = useCallback(
+    async (id: string, input: UpdateOrganizationInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await organizationsApi.update(id, input);
+        await load(page);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page],
+  );
+
+  const deleteOrganization = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await organizationsApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page],
+  );
+
+  const items = data?.items ?? [];
+
+  const filtered = useMemo(() => {
+    const term = filters.search.trim().toLowerCase();
+    return items.filter((org) => {
+      if (filters.status === "active" && !org.is_active) return false;
+      if (filters.status === "inactive" && org.is_active) return false;
+      if (term.length === 0) return true;
+      return (
+        org.name.toLowerCase().includes(term) ||
+        org.slug.toLowerCase().includes(term) ||
+        (org.description ?? "").toLowerCase().includes(term) ||
+        (org.billing_email ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [items, filters]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    items,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setSearch,
+    setStatus,
+    setPage,
+    resetFilters,
+    refresh,
+    createOrganization,
+    updateOrganization,
+    deleteOrganization,
+  };
+}
+```
+
+### frontend/src/features/organizations/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/OrganizationFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+
+import type { OrganizationFilters as OrganizationFiltersState } from "../useOrganizations";
+
+interface OrganizationFiltersProps {
+  readonly search: string;
+  readonly status: OrganizationFiltersState["status"];
+  readonly onSearchChange: (value: string) => void;
+  readonly onStatusChange: (value: OrganizationFiltersState["status"]) => void;
+  readonly onReset: () => void;
+}
+
+export function OrganizationFilters({
+  search,
+  status,
+  onSearchChange,
+  onStatusChange,
+  onReset,
+}: OrganizationFiltersProps) {
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="org-search">Search</Label>
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="org-search"
+              type="search"
+              placeholder="Name, slug, description, or email…"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              className="pl-9"
+              aria-label="Search organizations"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="org-status">Status</Label>
+          <select
+            id="org-status"
+            value={status}
+            onChange={(event) =>
+              onStatusChange(
+                event.target.value as OrganizationFiltersState["status"],
+              )
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="button" variant="outline" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/OrganizationsTable.tsx
+
+```tsx
+import { Building2, Pencil, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type { Organization } from "../types";
+
+interface OrganizationsTableProps {
+  readonly organizations: Organization[];
+  readonly isMutating: boolean;
+  readonly onEdit: (organization: Organization) => void;
+  readonly onDelete: (organization: Organization) => void;
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+function statusBadgeClasses(isActive: boolean): string {
+  return cn(
+    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+    isActive
+      ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : "border border-border bg-muted text-muted-foreground",
+  );
+}
+
+export function OrganizationsTable({
+  organizations,
+  isMutating,
+  onEdit,
+  onDelete,
+}: OrganizationsTableProps) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Organization
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Slug
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Billing email
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Created
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {organizations.map((organization) => (
+              <tr
+                key={organization.id}
+                className={cn(
+                  "transition-colors hover:bg-muted/30",
+                  !organization.is_active && "opacity-70",
+                )}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Building2 className="h-4 w-4" aria-hidden="true" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {organization.name}
+                      </span>
+                      {organization.description && (
+                        <span className="line-clamp-1 text-xs text-muted-foreground">
+                          {organization.description}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                  {organization.slug}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {organization.billing_email ?? "—"}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={statusBadgeClasses(organization.is_active)}>
+                    {organization.is_active ? "Active" : "Inactive"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatDate(organization.created_at)}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${organization.name}`}
+                      onClick={() => onEdit(organization)}
+                      disabled={isMutating}
+                      title="Edit organization"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${organization.name}`}
+                      onClick={() => onDelete(organization)}
+                      disabled={isMutating}
+                      title="Delete organization"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/CreateOrganizationDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  createOrganizationSchema,
+  emptyToNull,
+  slugify,
+  type CreateOrganizationFormValues,
+} from "../organizationSchemas";
+import type { CreateOrganizationInput } from "../types";
+import { Modal } from "./Modal";
+
+interface CreateOrganizationDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateOrganizationInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function CreateOrganizationDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: CreateOrganizationDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateOrganizationFormValues>({
+    resolver: zodResolver(createOrganizationSchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      description: "",
+      billing_email: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({ name: "", slug: "", description: "", billing_email: "" });
+  }, [open, reset]);
+
+  const nameValue = watch("name");
+  const slugValue = watch("slug");
+
+  useEffect(() => {
+    if (!nameValue) return;
+    if (!slugValue) {
+      setValue("slug", slugify(nameValue), { shouldValidate: false });
+    }
+  }, [nameValue, slugValue, setValue]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: CreateOrganizationInput = {
+        name: values.name.trim(),
+        slug: values.slug.trim().toLowerCase(),
+        description: emptyToNull(values.description),
+        billing_email: emptyToNull(values.billing_email),
+      };
+      await onSubmit(input);
+      toast({ title: "Organization created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create organization",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create organization"
+      description="Provision a new tenant in the system."
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="org-create-name">Name</Label>
+          <Input
+            id="org-create-name"
+            placeholder="e.g. Acme Corporation"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="org-create-slug">Slug</Label>
+          <Input
+            id="org-create-slug"
+            placeholder="acme"
+            {...register("slug")}
+            aria-invalid={Boolean(errors.slug)}
+          />
+          {errors.slug && (
+            <p className="text-xs text-destructive">{errors.slug.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="org-create-description">Description</Label>
+          <textarea
+            id="org-create-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Optional summary shown to admins"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="org-create-billing-email">Billing email</Label>
+          <Input
+            id="org-create-billing-email"
+            type="email"
+            autoComplete="off"
+            placeholder="billing@acme.com"
+            {...register("billing_email")}
+            aria-invalid={Boolean(errors.billing_email)}
+          />
+          {errors.billing_email && (
+            <p className="text-xs text-destructive">
+              {errors.billing_email.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create organization"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/EditOrganizationDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  editOrganizationSchema,
+  emptyToNull,
+  type EditOrganizationFormValues,
+} from "../organizationSchemas";
+import type { Organization, UpdateOrganizationInput } from "../types";
+import { Modal } from "./Modal";
+
+interface EditOrganizationDialogProps {
+  readonly open: boolean;
+  readonly organization: Organization | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (
+    id: string,
+    input: UpdateOrganizationInput,
+  ) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function EditOrganizationDialog({
+  open,
+  organization,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: EditOrganizationDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditOrganizationFormValues>({
+    resolver: zodResolver(editOrganizationSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      billing_email: "",
+      is_active: true,
+    },
+  });
+
+  useEffect(() => {
+    if (open && organization) {
+      reset({
+        name: organization.name,
+        description: organization.description ?? "",
+        billing_email: organization.billing_email ?? "",
+        is_active: organization.is_active,
+      });
+    }
+  }, [open, organization, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!organization) return;
+    try {
+      const input: UpdateOrganizationInput = {
+        name: values.name.trim(),
+        description: emptyToNull(values.description),
+        billing_email: emptyToNull(values.billing_email),
+        is_active: values.is_active,
+      };
+      await onSubmit(organization.id, input);
+      toast({ title: "Organization updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update organization",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && organization !== null}
+      onClose={onClose}
+      title={`Edit ${organization?.name ?? "organization"}`}
+      description={organization ? `Slug: ${organization.slug}` : undefined}
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="org-edit-name">Name</Label>
+          <Input
+            id="org-edit-name"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="org-edit-description">Description</Label>
+          <textarea
+            id="org-edit-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="org-edit-billing-email">Billing email</Label>
+          <Input
+            id="org-edit-billing-email"
+            type="email"
+            autoComplete="off"
+            {...register("billing_email")}
+            aria-invalid={Boolean(errors.billing_email)}
+          />
+          {errors.billing_email && (
+            <p className="text-xs text-destructive">
+              {errors.billing_email.message}
+            </p>
+          )}
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring"
+            {...register("is_active")}
+          />
+          Active
+        </label>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/DeleteOrganizationDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { Organization } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteOrganizationDialogProps {
+  readonly open: boolean;
+  readonly organization: Organization | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteOrganizationDialog({
+  open,
+  organization,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteOrganizationDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!organization) return;
+    try {
+      await onConfirm(organization.id);
+      toast({ title: "Organization deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete organization",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && organization !== null}
+      onClose={onClose}
+      title="Delete organization"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {organization ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{organization.name}</span>.
+                  All of its teams, projects, and outcomes will be affected.
+                </>
+              ) : (
+                "Organization details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !organization}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete organization"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/OrganizationsLoadingState.tsx
+
+```tsx
+export function OrganizationsLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-9 w-9 animate-pulse rounded-md bg-muted" />
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/organizations/components/OrganizationsErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface OrganizationsErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function OrganizationsErrorState({
+  message,
+  onRetry,
+}: OrganizationsErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">
+          Failed to load organizations
+        </h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/organizations/index.ts
+
+```ts
+export { organizationsApi } from "./organizationsApi";
+export { useOrganizations } from "./useOrganizations";
+export type {
+  CreateOrganizationInput,
+  Organization,
+  OrganizationListParams,
+  PaginatedOrganizations,
+  UpdateOrganizationInput,
+} from "./types";
+export { CreateOrganizationDialog } from "./components/CreateOrganizationDialog";
+export { DeleteOrganizationDialog } from "./components/DeleteOrganizationDialog";
+export { EditOrganizationDialog } from "./components/EditOrganizationDialog";
+export { Modal as OrganizationModal } from "./components/Modal";
+export { OrganizationFilters } from "./components/OrganizationFilters";
+export { OrganizationsErrorState } from "./components/OrganizationsErrorState";
+export { OrganizationsLoadingState } from "./components/OrganizationsLoadingState";
+export { OrganizationsTable } from "./components/OrganizationsTable";
+export { Pagination as OrganizationsPagination } from "./components/Pagination";
+```
+
+### frontend/src/pages/organizations/OrganizationsPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  CreateOrganizationDialog,
+  DeleteOrganizationDialog,
+  EditOrganizationDialog,
+  OrganizationFilters,
+  OrganizationsErrorState,
+  OrganizationsLoadingState,
+  OrganizationsPagination,
+  OrganizationsTable,
+  useOrganizations,
+  type Organization,
+} from "@/features/organizations";
+
+const PAGE_SIZE = 20;
+
+export default function OrganizationsPage() {
+  const {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setSearch,
+    setStatus,
+    setPage,
+    resetFilters,
+    refresh,
+    createOrganization,
+    updateOrganization,
+    deleteOrganization,
+  } = useOrganizations({ limit: PAGE_SIZE });
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<Organization | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Organization | null>(null);
+
+  const totalCount = data?.total ?? 0;
+  const hasResults = filtered.length > 0;
+  const filtersActive =
+    filters.search.trim().length > 0 || filters.status !== "all";
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Organizations
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage tenant organizations across the platform.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New organization
+        </Button>
+      </header>
+
+      <OrganizationFilters
+        search={filters.search}
+        status={filters.status}
+        onSearchChange={setSearch}
+        onStatusChange={setStatus}
+        onReset={resetFilters}
+      />
+
+      {isLoading && !data ? (
+        <OrganizationsLoadingState />
+      ) : error ? (
+        <OrganizationsErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            filtersActive
+              ? "No organizations match your filters"
+              : "No organizations yet"
+          }
+          description={
+            filtersActive
+              ? "Try broadening the search or clearing filters."
+              : "Create your first organization to onboard a tenant."
+          }
+          action={
+            <div className="flex items-center gap-2">
+              {filtersActive && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetFilters}
+                >
+                  Reset filters
+                </Button>
+              )}
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New organization
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <OrganizationsTable
+            organizations={filtered}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+          />
+          <OrganizationsPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateOrganizationDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createOrganization(input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <EditOrganizationDialog
+        open={editTarget !== null}
+        organization={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateOrganization(id, input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <DeleteOrganizationDialog
+        open={deleteTarget !== null}
+        organization={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteOrganization(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `OrganizationsPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const OrganizationsPage = lazy(
+  () => import("@/pages/organizations/OrganizationsPage"),
+);
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.ORGANIZATIONS}
+  element={<ModulePlaceholder title="Organizations" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.ORGANIZATIONS} element={<OrganizationsPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.

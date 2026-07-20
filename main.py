@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_gbPW8aPl-pdgxx9KcEyb10AbObx_XomGU2IlE9T8INk",
+    api_key="sk_VcQVjCIFUvewr_MM_30KbBWr37oFaKuxaaVZRWE3g4M",
 )
 
 model = "claude-opus-4-7"
@@ -98,12 +98,13 @@ The application already has fully working modules:
 - Sprints
 - Work Items
 - Business Outcomes
+- KPIs
 
 ====================================================
 STRICT RULES
 ====================================================
 
-Never modify, overwrite, regenerate, delete or reformat existing shared files.
+Never modify, overwrite, regenerate, delete or reformat any existing shared files.
 
 DO NOT touch:
 
@@ -125,7 +126,7 @@ Instead output:
 MANUAL ROUTER PATCH
 =========================
 
-showing ONLY the exact replacement.
+showing ONLY the required replacement.
 
 Return ONLY newly created files.
 
@@ -133,76 +134,60 @@ Return ONLY newly created files.
 TASK
 ====================================================
 
-Generate a complete KPIs module.
+Generate a complete Organizations module.
 
 Create ONLY these files:
 
-src/features/kpis/
+src/features/organizations/
     types.ts
-    kpisApi.ts
-    kpiSchemas.ts
-    useKPIs.ts
-    useBusinessOutcomeOptions.ts
-    useOwnerOptions.ts
+    organizationsApi.ts
+    organizationSchemas.ts
+    useOrganizations.ts
 
-src/features/kpis/components/
-    KPIsTable.tsx
-    KPIFilters.tsx
-    KPIStatusBadge.tsx
+src/features/organizations/components/
+    OrganizationsTable.tsx
+    OrganizationFilters.tsx
     Pagination.tsx
     Modal.tsx
-    CreateKPIDialog.tsx
-    EditKPIDialog.tsx
-    DeleteKPIDialog.tsx
-    KPIsLoadingState.tsx
-    KPIsErrorState.tsx
+    CreateOrganizationDialog.tsx
+    EditOrganizationDialog.tsx
+    DeleteOrganizationDialog.tsx
+    OrganizationsLoadingState.tsx
+    OrganizationsErrorState.tsx
 
-src/features/kpis/index.ts
+src/features/organizations/index.ts
 
-src/pages/kpis/KPIsPage.tsx
+src/pages/organizations/OrganizationsPage.tsx
 
 ====================================================
-KPI MODEL
+ORGANIZATION MODEL
 ====================================================
 
-Each KPI contains:
+Each organization contains:
 
 - id
 - name
-- description
-- businessOutcomeId
-- ownerId
-- metricType
-- targetValue
-- currentValue
-- unit
+- slug
+- logoUrl
+- industry
+- size
+- website
+- email
+- phone
+- address
+- city
+- state
+- country
+- postalCode
+- timezone
 - status
-- reportingFrequency
-- startDate
-- targetDate
 - createdAt
 - updatedAt
 
 Status:
 
-- On Track
-- At Risk
-- Off Track
-- Achieved
-
-Metric Types:
-
-- Number
-- Percentage
-- Currency
-- Duration
-
-Reporting Frequency:
-
-- Daily
-- Weekly
-- Monthly
-- Quarterly
+- Active
+- Inactive
 
 ====================================================
 PAGE FEATURES
@@ -216,8 +201,8 @@ Implement:
 ✔ Loading state
 ✔ Empty state
 ✔ Error state
-✔ Create KPI dialog
-✔ Edit KPI dialog
+✔ Create Organization dialog
+✔ Edit Organization dialog
 ✔ Delete confirmation dialog
 
 ====================================================
@@ -226,13 +211,12 @@ TABLE
 
 Columns:
 
-- KPI Name
-- Business Outcome
-- Owner
-- Current Value
-- Target Value
+- Organization
+- Industry
+- Size
+- Website
 - Status
-- Target Date
+- Created
 - Actions
 
 Actions:
@@ -244,14 +228,15 @@ Actions:
 API
 ====================================================
 
-Follow the exact same architecture and coding style already used by:
+Follow the same architecture used by:
 
 - Projects
 - Sprints
 - Work Items
 - Business Outcomes
+- KPIs
 
-Do NOT invent a different architecture.
+Do not invent a new architecture.
 
 ====================================================
 OUTPUT FORMAT

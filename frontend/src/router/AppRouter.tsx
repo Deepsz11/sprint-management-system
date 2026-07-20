@@ -19,6 +19,9 @@ const BusinessOutcomesPage = lazy(
   () => import("@/pages/business-outcomes/BusinessOutcomesPage"),
 );
 const KPIsPage = lazy(() => import("@/pages/kpis/KPIsPage"));
+const OrganizationsPage = lazy(
+  () => import("@/pages/organizations/OrganizationsPage"),
+);
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -46,10 +49,7 @@ export function AppRouter() {
             }
           >
             <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-            <Route
-              path={ROUTES.ORGANIZATIONS}
-              element={<ModulePlaceholder title="Organizations" />}
-            />
+            <Route path={ROUTES.ORGANIZATIONS} element={<OrganizationsPage />} />
             <Route
               path={ROUTES.TEAMS}
               element={<ModulePlaceholder title="Teams" />}
