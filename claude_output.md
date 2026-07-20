@@ -18620,3 +18620,2505 @@ class BusinessOutcomeDetailDTO(BaseModel):
     attribution_count: int
     latest_snapshot_at: datetime | None = None
 ```
+
+================================================================================
+
+### frontend/src/config/routes.ts
+
+```ts
+export const ROUTES = {
+  ROOT: "/",
+  LOGIN: "/login",
+  DASHBOARD: "/dashboard",
+  ORGANIZATIONS: "/organizations",
+  TEAMS: "/teams",
+  USERS: "/users",
+  PROJECTS: "/projects",
+  SPRINTS: "/sprints",
+  WORK_ITEMS: "/work-items",
+  BUSINESS_OUTCOMES: "/business-outcomes",
+  KPIS: "/kpis",
+  PROFILE: "/profile",
+  NOT_FOUND: "*",
+} as const;
+
+export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
+
+export const PUBLIC_ROUTES: readonly AppRoute[] = [ROUTES.LOGIN] as const;
+
+export const PROTECTED_ROUTES: readonly AppRoute[] = [
+  ROUTES.DASHBOARD,
+  ROUTES.ORGANIZATIONS,
+  ROUTES.TEAMS,
+  ROUTES.USERS,
+  ROUTES.PROJECTS,
+  ROUTES.SPRINTS,
+  ROUTES.WORK_ITEMS,
+  ROUTES.BUSINESS_OUTCOMES,
+  ROUTES.KPIS,
+  ROUTES.PROFILE,
+] as const;
+
+export const NAVIGATION_ITEMS: ReadonlyArray<{
+  label: string;
+  path: AppRoute;
+}> = [
+  { label: "Dashboard", path: ROUTES.DASHBOARD },
+  { label: "Organizations", path: ROUTES.ORGANIZATIONS },
+  { label: "Teams", path: ROUTES.TEAMS },
+  { label: "Users", path: ROUTES.USERS },
+  { label: "Projects", path: ROUTES.PROJECTS },
+  { label: "Sprints", path: ROUTES.SPRINTS },
+  { label: "Work Items", path: ROUTES.WORK_ITEMS },
+  { label: "Business Outcomes", path: ROUTES.BUSINESS_OUTCOMES },
+  { label: "KPIs", path: ROUTES.KPIS },
+] as const;
+```
+
+### frontend/src/router/AppRouter.tsx
+
+```tsx
+import { lazy, Suspense } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
+
+import { ProtectedRoute } from "../components/auth/ProtectedRoute";
+import { AppLayout } from "../components/layouts/AppLayout";
+import { AuthLayout } from "../components/layouts/AuthLayout";
+import { PageLoader } from "../components/ui/PageLoader";
+import { ROUTES } from "../config/routes";
+
+const LoginPage = lazy(() => import("../pages/auth/LoginPage"));
+const DashboardPage = lazy(() => import("../pages/dashboard/DashboardPage"));
+const OrganizationsPage = lazy(
+  () => import("../pages/organizations/OrganizationsPage"),
+);
+const TeamsPage = lazy(() => import("../pages/teams/TeamsPage"));
+const UsersPage = lazy(() => import("../pages/users/UsersPage"));
+const ProjectsPage = lazy(() => import("../pages/projects/ProjectsPage"));
+const SprintsPage = lazy(() => import("../pages/sprints/SprintsPage"));
+const WorkItemsPage = lazy(() => import("../pages/work-items/WorkItemsPage"));
+const BusinessOutcomesPage = lazy(
+  () => import("../pages/business-outcomes/BusinessOutcomesPage"),
+);
+const KpisPage = lazy(() => import("../pages/kpis/KpisPage"));
+const ProfilePage = lazy(() => import("../pages/profile/ProfilePage"));
+const NotFoundPage = lazy(() => import("../pages/errors/NotFoundPage"));
+
+export function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route
+            path={ROUTES.ROOT}
+            element={<Navigate to={ROUTES.DASHBOARD} replace />}
+          />
+
+          <Route element={<AuthLayout />}>
+            <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+          </Route>
+
+          <Route
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+            <Route
+              path={ROUTES.ORGANIZATIONS}
+              element={<OrganizationsPage />}
+            />
+            <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
+            <Route path={ROUTES.USERS} element={<UsersPage />} />
+            <Route path={ROUTES.PROJECTS} element={<ProjectsPage />} />
+            <Route path={ROUTES.SPRINTS} element={<SprintsPage />} />
+            <Route path={ROUTES.WORK_ITEMS} element={<WorkItemsPage />} />
+            <Route
+              path={ROUTES.BUSINESS_OUTCOMES}
+              element={<BusinessOutcomesPage />}
+            />
+            <Route path={ROUTES.KPIS} element={<KpisPage />} />
+            <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
+          </Route>
+
+          <Route path={ROUTES.NOT_FOUND} element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
+  );
+}
+
+export default AppRouter;
+```
+
+================================================================================
+
+### frontend/src/router/AppRouter.tsx
+
+```tsx
+import { Suspense } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
+
+import { AppLayout } from "../components/layout/AppLayout";
+import LoginPage from "../pages/auth/LoginPage";
+import DashboardPage from "../pages/dashboard/DashboardPage";
+import ModulePlaceholder from "../pages/ModulePlaceholder";
+import NotFoundPage from "../pages/NotFoundPage";
+import { ProtectedRoute } from "./ProtectedRoute";
+import { PublicRoute } from "./PublicRoute";
+
+export function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+
+          <Route
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/dashboard" element={<DashboardPage />} />
+
+            <Route
+              path="/organizations"
+              element={<ModulePlaceholder title="Organizations" />}
+            />
+            <Route
+              path="/teams"
+              element={<ModulePlaceholder title="Teams" />}
+            />
+            <Route
+              path="/users"
+              element={<ModulePlaceholder title="Users" />}
+            />
+            <Route
+              path="/projects"
+              element={<ModulePlaceholder title="Projects" />}
+            />
+            <Route
+              path="/sprints"
+              element={<ModulePlaceholder title="Sprints" />}
+            />
+            <Route
+              path="/work-items"
+              element={<ModulePlaceholder title="Work Items" />}
+            />
+            <Route
+              path="/business-outcomes"
+              element={<ModulePlaceholder title="Business Outcomes" />}
+            />
+            <Route
+              path="/kpis"
+              element={<ModulePlaceholder title="KPIs" />}
+            />
+            <Route
+              path="/profile"
+              element={<ModulePlaceholder title="Profile" />}
+            />
+          </Route>
+
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
+  );
+}
+
+export default AppRouter;
+```
+
+================================================================================
+
+### frontend/src/router/AppRouter.tsx
+
+```tsx
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+
+import { AppLayout } from "../components/layout/AppLayout";
+import LoginPage from "../pages/auth/LoginPage";
+import DashboardPage from "../pages/dashboard/DashboardPage";
+import ModulePlaceholder from "../pages/ModulePlaceholder";
+import NotFoundPage from "../pages/NotFoundPage";
+import { ProtectedRoute } from "./ProtectedRoute";
+import { PublicRoute } from "./PublicRoute";
+
+export function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          }
+        />
+
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<DashboardPage />} />
+
+          <Route
+            path="/organizations"
+            element={<ModulePlaceholder title="Organizations" />}
+          />
+          <Route
+            path="/teams"
+            element={<ModulePlaceholder title="Teams" />}
+          />
+          <Route
+            path="/users"
+            element={<ModulePlaceholder title="Users" />}
+          />
+          <Route
+            path="/projects"
+            element={<ModulePlaceholder title="Projects" />}
+          />
+          <Route
+            path="/sprints"
+            element={<ModulePlaceholder title="Sprints" />}
+          />
+          <Route
+            path="/work-items"
+            element={<ModulePlaceholder title="Work Items" />}
+          />
+          <Route
+            path="/business-outcomes"
+            element={<ModulePlaceholder title="Business Outcomes" />}
+          />
+          <Route path="/kpis" element={<ModulePlaceholder title="KPIs" />} />
+          <Route
+            path="/profile"
+            element={<ModulePlaceholder title="Profile" />}
+          />
+        </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default AppRouter;
+```
+
+================================================================================
+
+### frontend/package.json
+
+```json
+{
+  "name": "sprint-outcome-tracer-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\""
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-dropdown-menu": "^2.1.2",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-toast": "^1.2.2",
+    "axios": "^1.7.7",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.451.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.0",
+    "react-router-dom": "^6.26.2",
+    "tailwind-merge": "^2.5.2",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.11.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.12",
+    "postcss": "^8.4.47",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}
+```
+
+### frontend/tsconfig.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+```
+
+### frontend/tsconfig.node.json
+
+```json
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
+    "strict": true
+  },
+  "include": ["vite.config.ts"]
+}
+```
+
+### frontend/vite.config.ts
+
+```ts
+import path from "node:path";
+
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  server: {
+    host: true,
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
+  build: {
+    outDir: "dist",
+    sourcemap: true,
+  },
+});
+```
+
+### frontend/postcss.config.js
+
+```js
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+```
+
+### frontend/tailwind.config.ts
+
+```ts
+import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
+
+const config: Config = {
+  darkMode: ["class"],
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  theme: {
+    container: {
+      center: true,
+      padding: "1rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
+    },
+  },
+  plugins: [animate],
+};
+
+export default config;
+```
+
+### frontend/index.html
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Trace engineering work to measurable business outcomes."
+    />
+    <title>Sprint Business Outcome Tracer</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+```
+
+### frontend/.env.example
+
+```dotenv
+VITE_API_BASE_URL=/api/v1
+VITE_APP_NAME=Sprint Business Outcome Tracer
+VITE_STORAGE_PREFIX=sbot
+```
+
+### frontend/src/main.tsx
+
+```tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+
+import App from "./App";
+import "./styles/globals.css";
+
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Root element #root not found");
+}
+
+ReactDOM.createRoot(rootElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+```
+
+### frontend/src/App.tsx
+
+```tsx
+import { AuthProvider } from "./features/auth/AuthProvider";
+import { AppRouter } from "./router/AppRouter";
+import { ThemeProvider } from "./providers/ThemeProvider";
+import { ToastProvider } from "./providers/ToastProvider";
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AppRouter />
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
+  );
+}
+```
+
+### frontend/src/styles/globals.css
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+```
+
+### frontend/src/config/env.ts
+
+```ts
+interface AppEnv {
+  readonly API_BASE_URL: string;
+  readonly APP_NAME: string;
+  readonly STORAGE_PREFIX: string;
+}
+
+function readEnv(key: string, fallback: string): string {
+  const value = import.meta.env[key as keyof ImportMetaEnv] as
+    | string
+    | undefined;
+  return value && value.length > 0 ? value : fallback;
+}
+
+export const ENV: AppEnv = {
+  API_BASE_URL: readEnv("VITE_API_BASE_URL", "/api/v1"),
+  APP_NAME: readEnv("VITE_APP_NAME", "Sprint Business Outcome Tracer"),
+  STORAGE_PREFIX: readEnv("VITE_STORAGE_PREFIX", "sbot"),
+};
+```
+
+### frontend/src/config/routes.ts
+
+```ts
+export const ROUTES = {
+  ROOT: "/",
+  LOGIN: "/login",
+  DASHBOARD: "/dashboard",
+  ORGANIZATIONS: "/organizations",
+  TEAMS: "/teams",
+  USERS: "/users",
+  PROJECTS: "/projects",
+  SPRINTS: "/sprints",
+  WORK_ITEMS: "/work-items",
+  BUSINESS_OUTCOMES: "/business-outcomes",
+  KPIS: "/kpis",
+  OKRS: "/okrs",
+  REPORTS: "/reports",
+  PROFILE: "/profile",
+  NOT_FOUND: "*",
+} as const;
+
+export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
+```
+
+### frontend/src/config/navigation.ts
+
+```ts
+import {
+  BarChart3,
+  Briefcase,
+  Building2,
+  Gauge,
+  LayoutDashboard,
+  ListChecks,
+  Target,
+  Timer,
+  Trophy,
+  UserCog,
+  Users,
+  Users2,
+  type LucideIcon,
+} from "lucide-react";
+
+import { ROUTES, type AppRoute } from "./routes";
+
+export interface NavigationItem {
+  readonly label: string;
+  readonly path: AppRoute;
+  readonly icon: LucideIcon;
+}
+
+export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
+  { label: "Dashboard", path: ROUTES.DASHBOARD, icon: LayoutDashboard },
+  { label: "Organizations", path: ROUTES.ORGANIZATIONS, icon: Building2 },
+  { label: "Teams", path: ROUTES.TEAMS, icon: Users2 },
+  { label: "Users", path: ROUTES.USERS, icon: Users },
+  { label: "Projects", path: ROUTES.PROJECTS, icon: Briefcase },
+  { label: "Sprints", path: ROUTES.SPRINTS, icon: Timer },
+  { label: "Work Items", path: ROUTES.WORK_ITEMS, icon: ListChecks },
+  { label: "Business Outcomes", path: ROUTES.BUSINESS_OUTCOMES, icon: Target },
+  { label: "KPIs", path: ROUTES.KPIS, icon: Gauge },
+  { label: "OKRs", path: ROUTES.OKRS, icon: Trophy },
+  { label: "Reports", path: ROUTES.REPORTS, icon: BarChart3 },
+] as const;
+
+export const SECONDARY_NAVIGATION: readonly NavigationItem[] = [
+  { label: "Profile", path: ROUTES.PROFILE, icon: UserCog },
+] as const;
+```
+
+### frontend/src/lib/utils.ts
+
+```ts
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}
+```
+
+### frontend/src/lib/storage.ts
+
+```ts
+import { ENV } from "@/config/env";
+
+const PREFIX = ENV.STORAGE_PREFIX;
+
+function key(name: string): string {
+  return `${PREFIX}:${name}`;
+}
+
+export const storage = {
+  get<T = string>(name: string): T | null {
+    try {
+      const raw = window.localStorage.getItem(key(name));
+      if (raw === null) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return raw as unknown as T;
+      }
+    } catch {
+      return null;
+    }
+  },
+  set(name: string, value: unknown): void {
+    try {
+      const raw = typeof value === "string" ? value : JSON.stringify(value);
+      window.localStorage.setItem(key(name), raw);
+    } catch {
+      /* storage is best-effort */
+    }
+  },
+  remove(name: string): void {
+    try {
+      window.localStorage.removeItem(key(name));
+    } catch {
+      /* storage is best-effort */
+    }
+  },
+  clearAll(): void {
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith(`${PREFIX}:`)) {
+          toRemove.push(k);
+        }
+      }
+      toRemove.forEach((k) => window.localStorage.removeItem(k));
+    } catch {
+      /* storage is best-effort */
+    }
+  },
+};
+```
+
+### frontend/src/lib/tokens.ts
+
+```ts
+import { storage } from "./storage";
+
+const ACCESS_KEY = "auth.access_token";
+const REFRESH_KEY = "auth.refresh_token";
+
+export const tokenStorage = {
+  getAccessToken(): string | null {
+    return storage.get<string>(ACCESS_KEY);
+  },
+  getRefreshToken(): string | null {
+    return storage.get<string>(REFRESH_KEY);
+  },
+  setTokens(access: string, refresh: string): void {
+    storage.set(ACCESS_KEY, access);
+    storage.set(REFRESH_KEY, refresh);
+  },
+  clear(): void {
+    storage.remove(ACCESS_KEY);
+    storage.remove(REFRESH_KEY);
+  },
+};
+```
+
+### frontend/src/api/client.ts
+
+```ts
+import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from "axios";
+
+import { ENV } from "@/config/env";
+import { tokenStorage } from "@/lib/tokens";
+
+interface RetriableRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}
+
+interface RefreshResponse {
+  readonly access_token: string;
+  readonly refresh_token: string;
+  readonly token_type: string;
+  readonly expires_in: number;
+}
+
+const UNAUTHORIZED_EVENT = "sbot:unauthorized";
+
+export function emitUnauthorized(): void {
+  window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+}
+
+export function onUnauthorized(listener: () => void): () => void {
+  const handler = () => listener();
+  window.addEventListener(UNAUTHORIZED_EVENT, handler);
+  return () => window.removeEventListener(UNAUTHORIZED_EVENT, handler);
+}
+
+export const apiClient: AxiosInstance = axios.create({
+  baseURL: ENV.API_BASE_URL,
+  timeout: 30000,
+  headers: {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = tokenStorage.getAccessToken();
+  if (token) {
+    config.headers = config.headers ?? {};
+    (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function performRefresh(): Promise<string | null> {
+  const refreshToken = tokenStorage.getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const response = await axios.post<RefreshResponse>(
+      `${ENV.API_BASE_URL}/auth/token/refresh`,
+      { refresh_token: refreshToken },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const { access_token, refresh_token } = response.data;
+    tokenStorage.setTokens(access_token, refresh_token);
+    return access_token;
+  } catch {
+    tokenStorage.clear();
+    return null;
+  }
+}
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const original = error.config as RetriableRequestConfig | undefined;
+    const status = error.response?.status;
+
+    if (status === 401 && original && !original._retry) {
+      original._retry = true;
+
+      if (!refreshInFlight) {
+        refreshInFlight = performRefresh().finally(() => {
+          refreshInFlight = null;
+        });
+      }
+
+      const newToken = await refreshInFlight;
+      if (newToken) {
+        original.headers = original.headers ?? {};
+        (original.headers as Record<string, string>).Authorization =
+          `Bearer ${newToken}`;
+        return apiClient(original);
+      }
+
+      emitUnauthorized();
+    }
+
+    return Promise.reject(error);
+  },
+);
+```
+
+### frontend/src/api/endpoints.ts
+
+```ts
+export const API_ENDPOINTS = {
+  AUTH: {
+    LOGIN: "/auth/login",
+    REFRESH: "/auth/token/refresh",
+    LOGOUT: "/auth/logout",
+    LOGOUT_ALL: "/auth/logout-all",
+    ME: "/auth/me",
+    SESSIONS: "/auth/sessions",
+    CHANGE_PASSWORD: "/auth/password/change",
+  },
+  ORGANIZATIONS: "/organizations",
+  TEAMS: "/teams",
+  USERS: "/users",
+  PROJECTS: "/projects",
+  SPRINTS: "/sprints",
+  WORK_ITEMS: "/work-items",
+  BUSINESS_OUTCOMES: "/business-outcomes",
+  KPIS: "/kpis",
+} as const;
+```
+
+### frontend/src/api/errors.ts
+
+```ts
+import axios, { type AxiosError } from "axios";
+
+interface ApiErrorPayload {
+  readonly error?: string;
+  readonly message?: string;
+  readonly details?: Record<string, unknown>;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly details: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    status: number,
+    code: string,
+    details: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export function toApiError(error: unknown): ApiError {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError<ApiErrorPayload>;
+    const status = axiosError.response?.status ?? 0;
+    const payload = axiosError.response?.data;
+    const message =
+      payload?.message ?? axiosError.message ?? "Unexpected error";
+    const code = payload?.error ?? "unknown_error";
+    return new ApiError(message, status, code, payload?.details ?? {});
+  }
+  if (error instanceof Error) {
+    return new ApiError(error.message, 0, "unknown_error");
+  }
+  return new ApiError("Unexpected error", 0, "unknown_error");
+}
+```
+
+### frontend/src/features/auth/types.ts
+
+```ts
+export type UserRole =
+  | "super_admin"
+  | "org_admin"
+  | "executive"
+  | "product_manager"
+  | "engineering_manager"
+  | "engineer"
+  | "viewer";
+
+export type UserStatus =
+  | "active"
+  | "invited"
+  | "suspended"
+  | "deactivated";
+
+export interface AuthUser {
+  readonly id: string;
+  readonly email: string;
+  readonly full_name: string;
+  readonly organization_id: string | null;
+  readonly role: UserRole;
+  readonly status: UserStatus;
+  readonly last_login_at: string | null;
+  readonly is_email_verified: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface TokenPair {
+  readonly access_token: string;
+  readonly refresh_token: string;
+  readonly token_type: string;
+  readonly expires_in: number;
+}
+
+export interface LoginCredentials {
+  readonly email: string;
+  readonly password: string;
+}
+```
+
+### frontend/src/features/auth/authApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type { AuthUser, LoginCredentials, TokenPair } from "./types";
+
+export const authApi = {
+  async login(credentials: LoginCredentials): Promise<TokenPair> {
+    const params = new URLSearchParams();
+    params.append("username", credentials.email);
+    params.append("password", credentials.password);
+
+    const response = await apiClient.post<TokenPair>(
+      API_ENDPOINTS.AUTH.LOGIN,
+      params,
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      },
+    );
+    return response.data;
+  },
+
+  async me(): Promise<AuthUser> {
+    const response = await apiClient.get<AuthUser>(API_ENDPOINTS.AUTH.ME);
+    return response.data;
+  },
+
+  async logout(refreshToken: string): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.AUTH.LOGOUT, {
+      refresh_token: refreshToken,
+    });
+  },
+};
+```
+
+### frontend/src/features/auth/AuthContext.ts
+
+```ts
+import { createContext } from "react";
+
+import type { AuthUser, LoginCredentials } from "./types";
+
+export interface AuthContextValue {
+  readonly user: AuthUser | null;
+  readonly isAuthenticated: boolean;
+  readonly isInitializing: boolean;
+  readonly isSubmitting: boolean;
+  readonly login: (credentials: LoginCredentials) => Promise<void>;
+  readonly logout: () => Promise<void>;
+  readonly refreshCurrentUser: () => Promise<void>;
+}
+
+export const AuthContext = createContext<AuthContextValue | undefined>(
+  undefined,
+);
+```
+
+### frontend/src/features/auth/AuthProvider.tsx
+
+```tsx
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { onUnauthorized } from "@/api/client";
+import { toApiError } from "@/api/errors";
+import { tokenStorage } from "@/lib/tokens";
+
+import { AuthContext, type AuthContextValue } from "./AuthContext";
+import { authApi } from "./authApi";
+import type { AuthUser, LoginCredentials } from "./types";
+
+interface AuthProviderProps {
+  readonly children: React.ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const mounted = useRef<boolean>(true);
+
+  const refreshCurrentUser = useCallback(async () => {
+    const token = tokenStorage.getAccessToken();
+    if (!token) {
+      setUser(null);
+      return;
+    }
+    try {
+      const me = await authApi.me();
+      if (mounted.current) setUser(me);
+    } catch {
+      tokenStorage.clear();
+      if (mounted.current) setUser(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    void (async () => {
+      await refreshCurrentUser();
+      if (mounted.current) setIsInitializing(false);
+    })();
+    return () => {
+      mounted.current = false;
+    };
+  }, [refreshCurrentUser]);
+
+  useEffect(() => {
+    const off = onUnauthorized(() => {
+      tokenStorage.clear();
+      setUser(null);
+    });
+    return off;
+  }, []);
+
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    setIsSubmitting(true);
+    try {
+      const tokens = await authApi.login(credentials);
+      tokenStorage.setTokens(tokens.access_token, tokens.refresh_token);
+      const me = await authApi.me();
+      setUser(me);
+    } catch (error) {
+      throw toApiError(error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    const refreshToken = tokenStorage.getRefreshToken();
+    try {
+      if (refreshToken) {
+        await authApi.logout(refreshToken);
+      }
+    } catch {
+      /* best-effort logout */
+    } finally {
+      tokenStorage.clear();
+      setUser(null);
+    }
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      isAuthenticated: user !== null,
+      isInitializing,
+      isSubmitting,
+      login,
+      logout,
+      refreshCurrentUser,
+    }),
+    [user, isInitializing, isSubmitting, login, logout, refreshCurrentUser],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+```
+
+### frontend/src/features/auth/useAuth.ts
+
+```ts
+import { useContext } from "react";
+
+import { AuthContext, type AuthContextValue } from "./AuthContext";
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return ctx;
+}
+```
+
+### frontend/src/providers/ThemeProvider.tsx
+
+```tsx
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+
+import { storage } from "@/lib/storage";
+
+export type Theme = "light" | "dark" | "system";
+
+interface ThemeContextValue {
+  readonly theme: Theme;
+  readonly resolvedTheme: "light" | "dark";
+  readonly setTheme: (theme: Theme) => void;
+  readonly toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+
+const STORAGE_KEY = "ui.theme";
+
+function getSystemTheme(): "light" | "dark" {
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+interface ThemeProviderProps {
+  readonly children: React.ReactNode;
+  readonly defaultTheme?: Theme;
+}
+
+export function ThemeProvider({
+  children,
+  defaultTheme = "system",
+}: ThemeProviderProps) {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    const stored = storage.get<Theme>(STORAGE_KEY);
+    return stored ?? defaultTheme;
+  });
+  const [systemTheme, setSystemTheme] = useState<"light" | "dark">(
+    getSystemTheme,
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (event: MediaQueryListEvent) =>
+      setSystemTheme(event.matches ? "dark" : "light");
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  const resolvedTheme: "light" | "dark" =
+    theme === "system" ? systemTheme : theme;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(resolvedTheme);
+  }, [resolvedTheme]);
+
+  const setTheme = useCallback((next: Theme) => {
+    setThemeState(next);
+    storage.set(STORAGE_KEY, next);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }, [resolvedTheme, setTheme]);
+
+  const value = useMemo<ThemeContextValue>(
+    () => ({ theme, resolvedTheme, setTheme, toggleTheme }),
+    [theme, resolvedTheme, setTheme, toggleTheme],
+  );
+
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
+}
+
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error("useTheme must be used within a ThemeProvider");
+  return ctx;
+}
+```
+
+### frontend/src/providers/ToastProvider.tsx
+
+```tsx
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
+
+import { cn } from "@/lib/utils";
+
+export type ToastVariant = "default" | "success" | "error";
+
+export interface Toast {
+  readonly id: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly variant: ToastVariant;
+}
+
+interface ToastContextValue {
+  readonly toast: (input: Omit<Toast, "id" | "variant"> & { variant?: ToastVariant }) => void;
+  readonly dismiss: (id: string) => void;
+}
+
+const ToastContext = createContext<ToastContextValue | undefined>(undefined);
+
+interface ToastProviderProps {
+  readonly children: React.ReactNode;
+}
+
+const AUTO_DISMISS_MS = 4500;
+
+export function ToastProvider({ children }: ToastProviderProps) {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const dismiss = useCallback((id: string) => {
+    setToasts((current) => current.filter((t) => t.id !== id));
+  }, []);
+
+  const toast = useCallback<ToastContextValue["toast"]>(
+    (input) => {
+      const id = crypto.randomUUID();
+      const next: Toast = {
+        id,
+        title: input.title,
+        description: input.description,
+        variant: input.variant ?? "default",
+      };
+      setToasts((current) => [...current, next]);
+      window.setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+    },
+    [dismiss],
+  );
+
+  const value = useMemo<ToastContextValue>(
+    () => ({ toast, dismiss }),
+    [toast, dismiss],
+  );
+
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex flex-col items-center gap-2 p-4 sm:items-end"
+      >
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            role="status"
+            className={cn(
+              "pointer-events-auto w-full max-w-sm rounded-md border p-4 shadow-lg backdrop-blur",
+              t.variant === "success" &&
+                "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100",
+              t.variant === "error" &&
+                "border-destructive/40 bg-destructive/10 text-destructive",
+              t.variant === "default" &&
+                "border-border bg-card text-card-foreground",
+            )}
+          >
+            {t.title && <p className="text-sm font-medium">{t.title}</p>}
+            {t.description && (
+              <p className="mt-1 text-sm opacity-90">{t.description}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="mt-2 text-xs font-medium underline-offset-2 hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast(): ToastContextValue {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error("useToast must be used within a ToastProvider");
+  return ctx;
+}
+```
+
+### frontend/src/components/ui/Button.tsx
+
+```tsx
+import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
+
+import { cn } from "@/lib/utils";
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        sm: "h-8 px-3 text-xs",
+        md: "h-10 px-4 py-2",
+        lg: "h-11 px-6",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "primary",
+      size: "md",
+    },
+  },
+);
+
+export interface ButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  readonly asChild?: boolean;
+  readonly isLoading?: boolean;
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      className,
+      variant,
+      size,
+      asChild = false,
+      isLoading = false,
+      disabled,
+      children,
+      ...props
+    },
+    ref,
+  ) => {
+    const Comp = asChild ? Slot : "button";
+    return (
+      <Comp
+        ref={ref}
+        className={cn(buttonVariants({ variant, size }), className)}
+        disabled={disabled || isLoading}
+        {...props}
+      >
+        {isLoading ? (
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+          />
+        ) : null}
+        {children}
+      </Comp>
+    );
+  },
+);
+Button.displayName = "Button";
+```
+
+### frontend/src/components/ui/Input.tsx
+
+```tsx
+import { forwardRef, type InputHTMLAttributes } from "react";
+
+import { cn } from "@/lib/utils";
+
+export type InputProps = InputHTMLAttributes<HTMLInputElement>;
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type = "text", ...props }, ref) => (
+    <input
+      ref={ref}
+      type={type}
+      className={cn(
+        "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+        "file:border-0 file:bg-transparent file:text-sm file:font-medium",
+        "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Input.displayName = "Input";
+```
+
+### frontend/src/components/ui/Label.tsx
+
+```tsx
+import { forwardRef, type LabelHTMLAttributes } from "react";
+
+import { cn } from "@/lib/utils";
+
+export type LabelProps = LabelHTMLAttributes<HTMLLabelElement>;
+
+export const Label = forwardRef<HTMLLabelElement, LabelProps>(
+  ({ className, ...props }, ref) => (
+    <label
+      ref={ref}
+      className={cn(
+        "text-sm font-medium leading-none text-foreground",
+        "peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Label.displayName = "Label";
+```
+
+### frontend/src/components/ui/Card.tsx
+
+```tsx
+import { forwardRef, type HTMLAttributes } from "react";
+
+import { cn } from "@/lib/utils";
+
+export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Card.displayName = "Card";
+
+export const CardHeader = forwardRef<
+  HTMLDivElement,
+  HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+));
+CardHeader.displayName = "CardHeader";
+
+export const CardTitle = forwardRef<
+  HTMLHeadingElement,
+  HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "text-lg font-semibold leading-none tracking-tight",
+      className,
+    )}
+    {...props}
+  />
+));
+CardTitle.displayName = "CardTitle";
+
+export const CardDescription = forwardRef<
+  HTMLParagraphElement,
+  HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+));
+CardDescription.displayName = "CardDescription";
+
+export const CardContent = forwardRef<
+  HTMLDivElement,
+  HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+));
+CardContent.displayName = "CardContent";
+
+export const CardFooter = forwardRef<
+  HTMLDivElement,
+  HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+));
+CardFooter.displayName = "CardFooter";
+```
+
+### frontend/src/components/ui/Spinner.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+interface SpinnerProps {
+  readonly className?: string;
+  readonly label?: string;
+}
+
+export function Spinner({ className, label = "Loading" }: SpinnerProps) {
+  return (
+    <span role="status" aria-label={label} className={cn("inline-flex", className)}>
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-r-transparent" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+```
+
+### frontend/src/components/ui/PageLoader.tsx
+
+```tsx
+import { Spinner } from "./Spinner";
+
+export function PageLoader() {
+  return (
+    <div className="flex h-full min-h-[60vh] w-full items-center justify-center">
+      <Spinner className="text-muted-foreground" />
+    </div>
+  );
+}
+```
+
+### frontend/src/components/ui/EmptyState.tsx
+
+```tsx
+import type { ReactNode } from "react";
+
+import { cn } from "@/lib/utils";
+
+interface EmptyStateProps {
+  readonly title: string;
+  readonly description?: string;
+  readonly action?: ReactNode;
+  readonly className?: string;
+}
+
+export function EmptyState({
+  title,
+  description,
+  action,
+  className,
+}: EmptyStateProps) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-10 text-center",
+        className,
+      )}
+    >
+      <h3 className="text-lg font-semibold">{title}</h3>
+      {description && (
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+          {description}
+        </p>
+      )}
+      {action && <div className="mt-6">{action}</div>}
+    </div>
+  );
+}
+```
+
+### frontend/src/components/layout/Sidebar.tsx
+
+```tsx
+import { NavLink } from "react-router-dom";
+
+import {
+  PRIMARY_NAVIGATION,
+  SECONDARY_NAVIGATION,
+  type NavigationItem,
+} from "@/config/navigation";
+import { ENV } from "@/config/env";
+import { cn } from "@/lib/utils";
+
+interface SidebarProps {
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+}
+
+function NavItem({ item }: { item: NavigationItem }) {
+  const Icon = item.icon;
+  return (
+    <NavLink
+      to={item.path}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          isActive
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        )
+      }
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      <span className="truncate">{item.label}</span>
+    </NavLink>
+  );
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
+  return (
+    <>
+      {isOpen && (
+        <div
+          role="presentation"
+          onClick={onClose}
+          className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm md:hidden"
+        />
+      )}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-card transition-transform duration-200 md:sticky md:top-0 md:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-border px-4">
+          <span className="text-sm font-semibold uppercase tracking-widest text-primary">
+            SBOT
+          </span>
+          <span className="truncate text-sm text-muted-foreground">
+            {ENV.APP_NAME}
+          </span>
+        </div>
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="space-y-1">
+            {PRIMARY_NAVIGATION.map((item) => (
+              <NavItem key={item.path} item={item} />
+            ))}
+          </div>
+          <div className="mt-8 space-y-1">
+            <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Account
+            </p>
+            {SECONDARY_NAVIGATION.map((item) => (
+              <NavItem key={item.path} item={item} />
+            ))}
+          </div>
+        </nav>
+      </aside>
+    </>
+  );
+}
+```
+
+### frontend/src/components/layout/Topbar.tsx
+
+```tsx
+import { LogOut, Menu, Moon, Sun } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/features/auth/useAuth";
+import { useTheme } from "@/providers/ThemeProvider";
+
+interface TopbarProps {
+  readonly onOpenSidebar: () => void;
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+export function Topbar({ onOpenSidebar }: TopbarProps) {
+  const { user, logout } = useAuth();
+  const { resolvedTheme, toggleTheme } = useTheme();
+
+  return (
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur">
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
+          onClick={onOpenSidebar}
+          aria-label="Open sidebar"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        <div className="hidden md:block">
+          <h1 className="text-sm font-semibold">Sprint Outcome Tracer</h1>
+          <p className="text-xs text-muted-foreground">
+            Trace engineering work to business outcomes
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+        >
+          {resolvedTheme === "dark" ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
+        </Button>
+
+        {user && (
+          <div className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-1.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+              {initials(user.full_name)}
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-sm font-medium leading-none">{user.full_name}</p>
+              <p className="text-xs text-muted-foreground">{user.email}</p>
+            </div>
+          </div>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void logout()}
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Log out</span>
+        </Button>
+      </div>
+    </header>
+  );
+}
+```
+
+### frontend/src/components/layout/AppLayout.tsx
+
+```tsx
+import { useState } from "react";
+import { Outlet } from "react-router-dom";
+
+import { Sidebar } from "./Sidebar";
+import { Topbar } from "./Topbar";
+
+export function AppLayout() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+
+  return (
+    <div className="flex min-h-screen w-full bg-background">
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar onOpenSidebar={() => setIsSidebarOpen(true)} />
+        <main className="flex-1 overflow-x-hidden">
+          <div className="container mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/router/ProtectedRoute.tsx
+
+```tsx
+import { Navigate, useLocation } from "react-router-dom";
+
+import { PageLoader } from "@/components/ui/PageLoader";
+import { ROUTES } from "@/config/routes";
+import { useAuth } from "@/features/auth/useAuth";
+
+interface ProtectedRouteProps {
+  readonly children: React.ReactNode;
+}
+
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { isAuthenticated, isInitializing } = useAuth();
+  const location = useLocation();
+
+  if (isInitializing) {
+    return <PageLoader />;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Navigate
+        to={ROUTES.LOGIN}
+        replace
+        state={{ from: `${location.pathname}${location.search}` }}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+```
+
+### frontend/src/router/PublicRoute.tsx
+
+```tsx
+import { Navigate } from "react-router-dom";
+
+import { PageLoader } from "@/components/ui/PageLoader";
+import { ROUTES } from "@/config/routes";
+import { useAuth } from "@/features/auth/useAuth";
+
+interface PublicRouteProps {
+  readonly children: React.ReactNode;
+}
+
+export function PublicRoute({ children }: PublicRouteProps) {
+  const { isAuthenticated, isInitializing } = useAuth();
+
+  if (isInitializing) {
+    return <PageLoader />;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
+  }
+
+  return <>{children}</>;
+}
+```
+
+### frontend/src/router/AppRouter.tsx
+
+```tsx
+import { Suspense, lazy } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageLoader } from "@/components/ui/PageLoader";
+import { ROUTES } from "@/config/routes";
+
+import { ProtectedRoute } from "./ProtectedRoute";
+import { PublicRoute } from "./PublicRoute";
+
+const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
+const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
+const ModulePlaceholder = lazy(() => import("@/pages/ModulePlaceholder"));
+
+export function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route
+            path={ROUTES.ROOT}
+            element={<Navigate to={ROUTES.DASHBOARD} replace />}
+          />
+
+          <Route
+            path={ROUTES.LOGIN}
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+
+          <Route
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+            <Route
+              path={ROUTES.ORGANIZATIONS}
+              element={<ModulePlaceholder title="Organizations" />}
+            />
+            <Route
+              path={ROUTES.TEAMS}
+              element={<ModulePlaceholder title="Teams" />}
+            />
+            <Route
+              path={ROUTES.USERS}
+              element={<ModulePlaceholder title="Users" />}
+            />
+            <Route
+              path={ROUTES.PROJECTS}
+              element={<ModulePlaceholder title="Projects" />}
+            />
+            <Route
+              path={ROUTES.SPRINTS}
+              element={<ModulePlaceholder title="Sprints" />}
+            />
+            <Route
+              path={ROUTES.WORK_ITEMS}
+              element={<ModulePlaceholder title="Work Items" />}
+            />
+            <Route
+              path={ROUTES.BUSINESS_OUTCOMES}
+              element={<ModulePlaceholder title="Business Outcomes" />}
+            />
+            <Route
+              path={ROUTES.KPIS}
+              element={<ModulePlaceholder title="KPIs" />}
+            />
+            <Route
+              path={ROUTES.OKRS}
+              element={<ModulePlaceholder title="OKRs" />}
+            />
+            <Route
+              path={ROUTES.REPORTS}
+              element={<ModulePlaceholder title="Reports" />}
+            />
+            <Route
+              path={ROUTES.PROFILE}
+              element={<ModulePlaceholder title="Profile" />}
+            />
+          </Route>
+
+          <Route path={ROUTES.NOT_FOUND} element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
+  );
+}
+```
+
+### frontend/src/pages/auth/LoginPage.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
+import { z } from "zod";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { ENV } from "@/config/env";
+import { ROUTES } from "@/config/routes";
+import { useAuth } from "@/features/auth/useAuth";
+import { useToast } from "@/providers/ToastProvider";
+
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
+
+interface LocationState {
+  readonly from?: string;
+}
+
+export default function LoginPage() {
+  const { login, isSubmitting } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo =
+    (location.state as LocationState | null)?.from ?? ROUTES.DASHBOARD;
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  });
+
+  const onSubmit = handleSubmit(async (values) => {
+    try {
+      await login(values);
+      toast({ title: "Welcome back", variant: "success" });
+      navigate(redirectTo, { replace: true });
+    } catch (error) {
+      const err = toApiError(error);
+      toast({
+        title: "Sign-in failed",
+        description: err.message,
+        variant: "error",
+      });
+    }
+  });
+
+  const submitting = isSubmitting || formSubmitting;
+
+  return (
+    <div className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-10">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-2 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            {ENV.APP_NAME}
+          </p>
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>
+            Access sprints, outcomes, and KPIs in one place.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="space-y-4" noValidate>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@company.com"
+                aria-invalid={Boolean(errors.email)}
+                {...register("email")}
+              />
+              {errors.email && (
+                <p className="text-xs text-destructive">
+                  {errors.email.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                aria-invalid={Boolean(errors.password)}
+                {...register("password")}
+              />
+              {errors.password && (
+                <p className="text-xs text-destructive">
+                  {errors.password.message}
+                </p>
+              )}
+            </div>
+
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+```
+
+### frontend/src/pages/dashboard/DashboardPage.tsx
+
+```tsx
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import { useAuth } from "@/features/auth/useAuth";
+
+const STATS: ReadonlyArray<{
+  label: string;
+  value: string;
+  description: string;
+}> = [
+  {
+    label: "Active Sprints",
+    value: "—",
+    description: "Sprints currently in progress",
+  },
+  {
+    label: "Outcomes On Track",
+    value: "—",
+    description: "Business outcomes with healthy progress",
+  },
+  {
+    label: "KPIs Monitored",
+    value: "—",
+    description: "Metrics under active tracking",
+  },
+  {
+    label: "Attribution Coverage",
+    value: "—",
+    description: "Completed work items linked to outcomes",
+  },
+];
+
+export default function DashboardPage() {
+  const { user } = useAuth();
+
+  return (
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Welcome{user ? `, ${user.full_name.split(" ")[0]}` : ""}.
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your organization's business outcome tracker.
+        </p>
+      </header>
+
+      <section
+        aria-label="Key metrics"
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        {STATS.map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs uppercase tracking-wide">
+                {stat.label}
+              </CardDescription>
+              <CardTitle className="text-3xl">{stat.value}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                {stat.description}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Sprints</CardTitle>
+            <CardDescription>
+              Sprint activity across your projects will appear here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Once modules are enabled, this panel will summarize sprint
+              velocity, completion rate, and outcome attribution.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Outcomes At Risk</CardTitle>
+            <CardDescription>
+              Outcomes flagged as at risk or off track will be listed here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Progress vs. time-elapsed will drive automated risk detection
+              once outcomes and KPIs are populated.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  );
+}
+```
+
+### frontend/src/pages/NotFoundPage.tsx
+
+```tsx
+import { Link } from "react-router-dom";
+
+import { Button } from "@/components/ui/Button";
+import { ROUTES } from "@/config/routes";
+
+export default function NotFoundPage() {
+  return (
+    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background px-4 text-center">
+      <p className="text-sm font-semibold uppercase tracking-widest text-primary">
+        404
+      </p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+        Page not found
+      </h1>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        The page you were looking for doesn't exist, was moved, or is not yet
+        available.
+      </p>
+      <Button asChild className="mt-6">
+        <Link to={ROUTES.DASHBOARD}>Back to dashboard</Link>
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/pages/ModulePlaceholder.tsx
+
+```tsx
+import { Sparkles } from "lucide-react";
+
+import { EmptyState } from "@/components/ui/EmptyState";
+
+interface ModulePlaceholderProps {
+  readonly title: string;
+  readonly description?: string;
+}
+
+export default function ModulePlaceholder({
+  title,
+  description,
+}: ModulePlaceholderProps) {
+  return (
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          This module is part of the Sprint Business Outcome Tracer roadmap.
+        </p>
+      </header>
+
+      <EmptyState
+        title={`${title} is coming soon`}
+        description={
+          description ??
+          "The foundation is in place. Feature screens for this module will be enabled in an upcoming release."
+        }
+        action={
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span>Under active development</span>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+```
+
+### frontend/src/vite-env.d.ts
+
+```ts
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_BASE_URL?: string;
+  readonly VITE_APP_NAME?: string;
+  readonly VITE_STORAGE_PREFIX?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+```
+
+### frontend/.gitignore
+
+```gitignore
+node_modules
+dist
+dist-ssr
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.vscode
+.idea
+```
+
+### frontend/README.md
+
+```markdown
+# Sprint Business Outcome Tracer — Frontend
+
+React 18 + Vite + TypeScript + TailwindCSS + shadcn/ui foundation for the
+Sprint Business Outcome Tracer.
+
+## Quick start
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+The dev server proxies `/api` to the backend at `http://localhost:8000`.
+
+## Scripts
+
+- `npm run dev` — start the Vite dev server
+- `npm run build` — type-check and build the production bundle
+- `npm run preview` — preview the production build
+- `npm run lint` — run ESLint
+
+## Project structure
+
+- `src/api` — Axios client, endpoints, error mapping
+- `src/components/layout` — `AppLayout`, `Sidebar`, `Topbar`
+- `src/components/ui` — reusable primitives (`Button`, `Input`, `Card`, ...)
+- `src/config` — environment, routes, navigation
+- `src/features/auth` — auth provider, hook, API, types
+- `src/lib` — utilities (`cn`, `storage`, `tokens`)
+- `src/pages` — top-level pages (login, dashboard, 404, placeholder)
+- `src/providers` — `ThemeProvider`, `ToastProvider`
+- `src/router` — `AppRouter`, `ProtectedRoute`, `PublicRoute`
+
+## Notes
+
+- All routes are registered in `src/router/AppRouter.tsx` using the `ROUTES`
+  constants from `src/config/routes.ts`.
+- Routes for modules that are not yet implemented render `ModulePlaceholder`.
+- `AuthProvider` wraps the app and handles token storage, refresh, and the
+  current user.
+```

@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_Bn9F1GOpgkr9rOdq188oImYIlXDGi10tYtgAwWYpoMM",
+    api_key="sk_VRAEahMSRg4AGp_hCqRBG6tSjFt9lGNP49G7AoxjejE",
 )
 
 model = "claude-opus-4-7"
@@ -88,56 +88,77 @@ Do not regenerate previously generated files.
 messages.append({
     "role": "user",
     "content": """
-    You are a Senior Python + FastAPI Staff Engineer.
+    You are a senior React + TypeScript architect.
 
-The backend has already been generated.
+Generate the COMPLETE frontend foundation for a production-grade SaaS called Sprint Business Outcome Tracker.
 
-Your task is NOT to generate new features.
+Tech Stack
+- React 18
+- Vite
+- TypeScript
+- React Router v6
+- TailwindCSS
+- shadcn/ui
+- Axios
+- React Hook Form
+- Zod
 
-Your ONLY task is to repair startup/runtime errors so the application starts successfully.
+Generate ONLY the frontend foundation.
 
-Current startup command:
+Include:
 
-uvicorn app.api.main:app --reload
+Project structure
 
-The project currently has recurring issues across multiple routers.
+Routing
 
-Fix ALL occurrences of these problems across the entire backend:
+Authentication
 
-1. DELETE endpoints using HTTP_204_NO_CONTENT incorrectly.
-   - Replace with HTTP_200_OK.
-   - Return {"message": "... deleted successfully"}.
-   - Remove response_class=Response where unnecessary.
-   - Ensure no response_model conflicts exist.
+Axios API client
 
-2. Fix all __future__ import ordering.
+Token storage
 
-3. Fix syntax errors.
+Theme provider
 
-4. Fix indentation issues.
+Sidebar
 
-5. Fix invalid FastAPI decorators.
+Topbar
 
-6. Fix Pydantic configuration issues.
+App layout
 
-7. Fix import issues.
+ProtectedRoute
 
-8. Fix any startup/runtime error preventing FastAPI from booting.
+PublicRoute
 
-Rules:
+Dashboard page
 
-- Do NOT add features.
-- Do NOT redesign architecture.
-- Do NOT rename modules.
-- Do NOT change business logic.
-- Only modify files that require fixes.
-- Make the backend boot successfully.
+Login page
 
-Assume the goal is that this command runs successfully:
+404 page
 
-uvicorn app.api.main:app --reload
+ModulePlaceholder page
 
-Output ONLY modified files.
+Common UI components
+
+Configuration
+
+Do NOT generate CRUD pages.
+
+Do NOT generate feature modules.
+
+Routes that don't exist yet must point to ModulePlaceholder.
+
+Rules
+
+- Use named exports consistently.
+- Use ROUTES (uppercase) everywhere.
+- Never use default exports except App.tsx.
+- Do not generate duplicate layouts.
+- Do not generate duplicate routers.
+- Generate complete working files only.
+- Every import must reference an existing file.
+- Do not invent components.
+
+Return all frontend files.
      """
 })
 # -----------------------------
