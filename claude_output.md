@@ -27255,3 +27255,2277 @@ with:
 ```
 
 No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/business-outcomes/types.ts
+
+```ts
+export type OutcomeStatus =
+  | "proposed"
+  | "active"
+  | "achieved"
+  | "at_risk"
+  | "off_track"
+  | "abandoned";
+
+export interface BusinessOutcome {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly owner_id: string | null;
+  readonly name: string;
+  readonly description: string | null;
+  readonly hypothesis: string | null;
+  readonly status: OutcomeStatus;
+  readonly target_date: string | null;
+  readonly baseline_value: string | number | null;
+  readonly target_value: string | number | null;
+  readonly current_value: string | number | null;
+  readonly progress_percent: string | number;
+  readonly confidence_score: string | number | null;
+  readonly financial_impact_estimate: string | number | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface OutcomeProjectOption {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly team_id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly slug: string;
+  readonly is_archived: boolean;
+}
+
+export interface OutcomeOwnerOption {
+  readonly id: string;
+  readonly email: string;
+  readonly full_name: string;
+  readonly organization_id: string | null;
+  readonly role: string;
+  readonly status: string;
+}
+
+export interface OutcomeKpiOption {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly outcome_id: string | null;
+  readonly owner_id: string | null;
+  readonly name: string;
+  readonly unit: string;
+  readonly currency: string | null;
+  readonly direction: string;
+  readonly is_active: boolean;
+}
+
+export interface PaginatedBusinessOutcomes {
+  readonly items: BusinessOutcome[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedOutcomeProjects {
+  readonly items: OutcomeProjectOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedOutcomeOwners {
+  readonly items: OutcomeOwnerOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedOutcomeKpis {
+  readonly items: OutcomeKpiOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CreateBusinessOutcomeInput {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly hypothesis?: string | null;
+  readonly owner_id?: string | null;
+  readonly target_date?: string | null;
+  readonly baseline_value?: string | null;
+  readonly target_value?: string | null;
+  readonly current_value?: string | null;
+  readonly confidence_score?: string | null;
+  readonly financial_impact_estimate?: string | null;
+}
+
+export interface UpdateBusinessOutcomeInput {
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly hypothesis?: string | null;
+  readonly owner_id?: string | null;
+  readonly status?: OutcomeStatus;
+  readonly target_date?: string | null;
+  readonly baseline_value?: string | null;
+  readonly target_value?: string | null;
+  readonly current_value?: string | null;
+  readonly confidence_score?: string | null;
+  readonly financial_impact_estimate?: string | null;
+}
+
+export interface BusinessOutcomeListParams {
+  readonly limit: number;
+  readonly offset: number;
+  readonly owner_id?: string;
+  readonly status?: readonly OutcomeStatus[];
+  readonly target_before?: string;
+  readonly target_after?: string;
+  readonly search?: string;
+}
+```
+
+### frontend/src/features/business-outcomes/businessOutcomesApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  BusinessOutcome,
+  BusinessOutcomeListParams,
+  CreateBusinessOutcomeInput,
+  PaginatedBusinessOutcomes,
+  PaginatedOutcomeKpis,
+  PaginatedOutcomeOwners,
+  PaginatedOutcomeProjects,
+  UpdateBusinessOutcomeInput,
+} from "./types";
+
+function buildParams(
+  params: BusinessOutcomeListParams,
+): Record<string, unknown> {
+  const query: Record<string, unknown> = {
+    limit: params.limit,
+    offset: params.offset,
+  };
+  if (params.owner_id) query.owner_id = params.owner_id;
+  if (params.status && params.status.length > 0) {
+    query.status = [...params.status];
+  }
+  if (params.target_before) query.target_before = params.target_before;
+  if (params.target_after) query.target_after = params.target_after;
+  if (params.search && params.search.trim().length > 0) {
+    query.search = params.search.trim();
+  }
+  return query;
+}
+
+export const businessOutcomesApi = {
+  async list(
+    params: BusinessOutcomeListParams,
+  ): Promise<PaginatedBusinessOutcomes> {
+    const response = await apiClient.get<PaginatedBusinessOutcomes>(
+      API_ENDPOINTS.BUSINESS_OUTCOMES,
+      { params: buildParams(params) },
+    );
+    return response.data;
+  },
+
+  async create(input: CreateBusinessOutcomeInput): Promise<BusinessOutcome> {
+    const response = await apiClient.post<BusinessOutcome>(
+      API_ENDPOINTS.BUSINESS_OUTCOMES,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(
+    id: string,
+    input: UpdateBusinessOutcomeInput,
+  ): Promise<BusinessOutcome> {
+    const response = await apiClient.patch<BusinessOutcome>(
+      `${API_ENDPOINTS.BUSINESS_OUTCOMES}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.BUSINESS_OUTCOMES}/${id}`);
+  },
+
+  async listProjects(): Promise<PaginatedOutcomeProjects> {
+    const response = await apiClient.get<PaginatedOutcomeProjects>(
+      API_ENDPOINTS.PROJECTS,
+      { params: { limit: 200, offset: 0, include_archived: false } },
+    );
+    return response.data;
+  },
+
+  async listOwners(): Promise<PaginatedOutcomeOwners> {
+    const response = await apiClient.get<PaginatedOutcomeOwners>(
+      API_ENDPOINTS.USERS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+
+  async listKpis(outcomeId?: string): Promise<PaginatedOutcomeKpis> {
+    const params: Record<string, unknown> = { limit: 200, offset: 0 };
+    if (outcomeId) params.outcome_id = outcomeId;
+    const response = await apiClient.get<PaginatedOutcomeKpis>(
+      API_ENDPOINTS.KPIS,
+      { params },
+    );
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/business-outcomes/businessOutcomeSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const STATUSES = [
+  "proposed",
+  "active",
+  "achieved",
+  "at_risk",
+  "off_track",
+  "abandoned",
+] as const;
+
+const decimalString = z
+  .string()
+  .trim()
+  .regex(
+    /^-?\d+(\.\d+)?$/,
+    "Enter a number (up to 6 decimal places)",
+  );
+
+const optionalDecimal = z.union([z.literal(""), decimalString]).optional();
+
+const percentString = z
+  .string()
+  .trim()
+  .regex(/^-?\d+(\.\d+)?$/, "Enter a number")
+  .refine((value) => {
+    const parsed = Number(value);
+    return parsed >= 0 && parsed <= 100;
+  }, "Must be between 0 and 100");
+
+const optionalPercent = z.union([z.literal(""), percentString]).optional();
+
+const optionalDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+  .optional()
+  .or(z.literal(""));
+
+const optionalOwner = z.string().uuid().optional().or(z.literal(""));
+
+const optionalDescription = z
+  .string()
+  .trim()
+  .max(4000, "Must be 4000 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+export const createBusinessOutcomeSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(300, "Must be 300 characters or fewer"),
+  description: optionalDescription,
+  hypothesis: optionalDescription,
+  owner_id: optionalOwner,
+  target_date: optionalDate,
+  baseline_value: optionalDecimal,
+  target_value: optionalDecimal,
+  current_value: optionalDecimal,
+  confidence_score: optionalPercent,
+  financial_impact_estimate: optionalDecimal,
+});
+
+export type CreateBusinessOutcomeFormValues = z.infer<
+  typeof createBusinessOutcomeSchema
+>;
+
+export const editBusinessOutcomeSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(300, "Must be 300 characters or fewer"),
+  description: optionalDescription,
+  hypothesis: optionalDescription,
+  owner_id: optionalOwner,
+  status: z.enum(STATUSES),
+  target_date: optionalDate,
+  baseline_value: optionalDecimal,
+  target_value: optionalDecimal,
+  current_value: optionalDecimal,
+  confidence_score: optionalPercent,
+  financial_impact_estimate: optionalDecimal,
+});
+
+export type EditBusinessOutcomeFormValues = z.infer<
+  typeof editBusinessOutcomeSchema
+>;
+
+export const OUTCOME_STATUS_OPTIONS = STATUSES;
+
+export function emptyToNull(value: string | undefined | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+```
+
+### frontend/src/features/business-outcomes/useBusinessOutcomes.ts
+
+```ts
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { businessOutcomesApi } from "./businessOutcomesApi";
+import type {
+  BusinessOutcome,
+  BusinessOutcomeListParams,
+  CreateBusinessOutcomeInput,
+  OutcomeStatus,
+  PaginatedBusinessOutcomes,
+  UpdateBusinessOutcomeInput,
+} from "./types";
+
+interface UseBusinessOutcomesOptions {
+  readonly limit: number;
+}
+
+export interface BusinessOutcomeFilters {
+  readonly ownerId: string | null;
+  readonly statuses: readonly OutcomeStatus[];
+  readonly search: string;
+  readonly targetBefore: string | null;
+  readonly targetAfter: string | null;
+}
+
+interface UseBusinessOutcomesResult {
+  readonly data: PaginatedBusinessOutcomes | null;
+  readonly items: BusinessOutcome[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly filters: BusinessOutcomeFilters;
+  readonly setOwnerId: (value: string | null) => void;
+  readonly setStatuses: (values: readonly OutcomeStatus[]) => void;
+  readonly setSearch: (value: string) => void;
+  readonly setTargetBefore: (value: string | null) => void;
+  readonly setTargetAfter: (value: string | null) => void;
+  readonly setPage: (page: number) => void;
+  readonly resetFilters: () => void;
+  readonly refresh: () => Promise<void>;
+  readonly createOutcome: (
+    input: CreateBusinessOutcomeInput,
+  ) => Promise<BusinessOutcome>;
+  readonly updateOutcome: (
+    id: string,
+    input: UpdateBusinessOutcomeInput,
+  ) => Promise<BusinessOutcome>;
+  readonly deleteOutcome: (id: string) => Promise<void>;
+}
+
+const INITIAL_FILTERS: BusinessOutcomeFilters = {
+  ownerId: null,
+  statuses: [],
+  search: "",
+  targetBefore: null,
+  targetAfter: null,
+};
+
+export function useBusinessOutcomes(
+  options: UseBusinessOutcomesOptions = { limit: 20 },
+): UseBusinessOutcomesResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedBusinessOutcomes | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [filters, setFilters] = useState<BusinessOutcomeFilters>(
+    INITIAL_FILTERS,
+  );
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number, currentFilters: BusinessOutcomeFilters) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: BusinessOutcomeListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+          owner_id: currentFilters.ownerId ?? undefined,
+          status:
+            currentFilters.statuses.length > 0
+              ? currentFilters.statuses
+              : undefined,
+          target_before: currentFilters.targetBefore ?? undefined,
+          target_after: currentFilters.targetAfter ?? undefined,
+          search:
+            currentFilters.search.trim().length > 0
+              ? currentFilters.search
+              : undefined,
+        };
+        const result = await businessOutcomesApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page, filters);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page, filters]);
+
+  const patchFilters = useCallback(
+    (patch: Partial<BusinessOutcomeFilters>) => {
+      setFilters((current) => ({ ...current, ...patch }));
+      setPage(1);
+    },
+    [],
+  );
+
+  const setOwnerId = useCallback(
+    (value: string | null) => patchFilters({ ownerId: value }),
+    [patchFilters],
+  );
+  const setStatuses = useCallback(
+    (values: readonly OutcomeStatus[]) => patchFilters({ statuses: values }),
+    [patchFilters],
+  );
+  const setSearch = useCallback(
+    (value: string) => patchFilters({ search: value }),
+    [patchFilters],
+  );
+  const setTargetBefore = useCallback(
+    (value: string | null) => patchFilters({ targetBefore: value }),
+    [patchFilters],
+  );
+  const setTargetAfter = useCallback(
+    (value: string | null) => patchFilters({ targetAfter: value }),
+    [patchFilters],
+  );
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+    setPage(1);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page, filters);
+  }, [load, page, filters]);
+
+  const createOutcome = useCallback(
+    async (input: CreateBusinessOutcomeInput) => {
+      setIsMutating(true);
+      try {
+        const created = await businessOutcomesApi.create(input);
+        setPage(1);
+        await load(1, filters);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, filters],
+  );
+
+  const updateOutcome = useCallback(
+    async (id: string, input: UpdateBusinessOutcomeInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await businessOutcomesApi.update(id, input);
+        await load(page, filters);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, filters],
+  );
+
+  const deleteOutcome = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await businessOutcomesApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage, filters);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page, filters],
+  );
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    items: data?.items ?? [],
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setOwnerId,
+    setStatuses,
+    setSearch,
+    setTargetBefore,
+    setTargetAfter,
+    setPage,
+    resetFilters,
+    refresh,
+    createOutcome,
+    updateOutcome,
+    deleteOutcome,
+  };
+}
+```
+
+### frontend/src/features/business-outcomes/useProjectOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { businessOutcomesApi } from "./businessOutcomesApi";
+import type { OutcomeOwnerOption, OutcomeProjectOption } from "./types";
+
+interface UseProjectOptionsResult {
+  readonly projects: OutcomeProjectOption[];
+  readonly owners: OutcomeOwnerOption[];
+  readonly isLoadingProjects: boolean;
+  readonly isLoadingOwners: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useProjectOptions(): UseProjectOptionsResult {
+  const [projects, setProjects] = useState<OutcomeProjectOption[]>([]);
+  const [owners, setOwners] = useState<OutcomeOwnerOption[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
+  const [isLoadingOwners, setIsLoadingOwners] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoadingProjects(true);
+      try {
+        const result = await businessOutcomesApi.listProjects();
+        if (!cancelled) setProjects(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoadingProjects(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoadingOwners(true);
+      try {
+        const result = await businessOutcomesApi.listOwners();
+        if (!cancelled) setOwners(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoadingOwners(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return {
+    projects,
+    owners,
+    isLoadingProjects,
+    isLoadingOwners,
+    error,
+  };
+}
+```
+
+### frontend/src/features/business-outcomes/useKpiOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { businessOutcomesApi } from "./businessOutcomesApi";
+import type { OutcomeKpiOption } from "./types";
+
+interface UseKpiOptionsResult {
+  readonly kpis: OutcomeKpiOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useKpiOptions(outcomeId?: string): UseKpiOptionsResult {
+  const [kpis, setKpis] = useState<OutcomeKpiOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await businessOutcomesApi.listKpis(outcomeId);
+        if (!cancelled) setKpis(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [outcomeId]);
+
+  return { kpis, isLoading, error };
+}
+```
+
+### frontend/src/features/business-outcomes/components/BusinessOutcomeStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+import type { OutcomeStatus } from "../types";
+
+const STYLES: Record<OutcomeStatus, string> = {
+  proposed: "border border-border bg-muted text-muted-foreground",
+  active:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  achieved:
+    "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  at_risk:
+    "border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  off_track:
+    "border border-destructive/40 bg-destructive/10 text-destructive",
+  abandoned:
+    "border border-border bg-muted text-muted-foreground line-through",
+};
+
+const LABELS: Record<OutcomeStatus, string> = {
+  proposed: "Proposed",
+  active: "Active",
+  achieved: "Achieved",
+  at_risk: "At Risk",
+  off_track: "Off Track",
+  abandoned: "Abandoned",
+};
+
+interface BusinessOutcomeStatusBadgeProps {
+  readonly status: OutcomeStatus;
+}
+
+export function BusinessOutcomeStatusBadge({
+  status,
+}: BusinessOutcomeStatusBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STYLES[status],
+      )}
+    >
+      {LABELS[status]}
+    </span>
+  );
+}
+
+export { LABELS as OUTCOME_STATUS_LABELS };
+```
+
+### frontend/src/features/business-outcomes/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/BusinessOutcomeFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+
+import type { OutcomeOwnerOption, OutcomeStatus } from "../types";
+import { OUTCOME_STATUS_OPTIONS } from "../businessOutcomeSchemas";
+import { OUTCOME_STATUS_LABELS } from "./BusinessOutcomeStatusBadge";
+
+interface BusinessOutcomeFiltersProps {
+  readonly owners: OutcomeOwnerOption[];
+  readonly isLoadingOwners: boolean;
+  readonly ownerId: string | null;
+  readonly statuses: readonly OutcomeStatus[];
+  readonly search: string;
+  readonly targetBefore: string | null;
+  readonly targetAfter: string | null;
+  readonly onOwnerChange: (value: string | null) => void;
+  readonly onStatusChange: (value: OutcomeStatus | "") => void;
+  readonly onSearchChange: (value: string) => void;
+  readonly onTargetBeforeChange: (value: string | null) => void;
+  readonly onTargetAfterChange: (value: string | null) => void;
+  readonly onReset: () => void;
+}
+
+export function BusinessOutcomeFilters({
+  owners,
+  isLoadingOwners,
+  ownerId,
+  statuses,
+  search,
+  targetBefore,
+  targetAfter,
+  onOwnerChange,
+  onStatusChange,
+  onSearchChange,
+  onTargetBeforeChange,
+  onTargetAfterChange,
+  onReset,
+}: BusinessOutcomeFiltersProps) {
+  const activeStatus = statuses[0] ?? "";
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-2">
+          <Label htmlFor="bo-owner">Owner</Label>
+          <select
+            id="bo-owner"
+            value={ownerId ?? ""}
+            onChange={(event) =>
+              onOwnerChange(event.target.value ? event.target.value : null)
+            }
+            disabled={isLoadingOwners}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingOwners ? "Loading…" : "All owners"}
+            </option>
+            {owners.map((owner) => (
+              <option key={owner.id} value={owner.id}>
+                {owner.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-status">Status</Label>
+          <select
+            id="bo-status"
+            value={activeStatus}
+            onChange={(event) =>
+              onStatusChange(event.target.value as OutcomeStatus | "")
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All statuses</option>
+            {OUTCOME_STATUS_OPTIONS.map((status) => (
+              <option key={status} value={status}>
+                {OUTCOME_STATUS_LABELS[status]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-target-after">Target after</Label>
+          <Input
+            id="bo-target-after"
+            type="date"
+            value={targetAfter ?? ""}
+            onChange={(event) =>
+              onTargetAfterChange(
+                event.target.value ? event.target.value : null,
+              )
+            }
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-target-before">Target before</Label>
+          <Input
+            id="bo-target-before"
+            type="date"
+            value={targetBefore ?? ""}
+            onChange={(event) =>
+              onTargetBeforeChange(
+                event.target.value ? event.target.value : null,
+              )
+            }
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-md">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            placeholder="Search by name…"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            className="pl-9"
+            aria-label="Search business outcomes"
+          />
+        </div>
+        <Button type="button" variant="outline" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/BusinessOutcomesTable.tsx
+
+```tsx
+import { Pencil, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type {
+  BusinessOutcome,
+  OutcomeOwnerOption,
+  OutcomeProjectOption,
+} from "../types";
+import { BusinessOutcomeStatusBadge } from "./BusinessOutcomeStatusBadge";
+
+interface BusinessOutcomesTableProps {
+  readonly outcomes: BusinessOutcome[];
+  readonly projects: OutcomeProjectOption[];
+  readonly owners: OutcomeOwnerOption[];
+  readonly isMutating: boolean;
+  readonly onEdit: (outcome: BusinessOutcome) => void;
+  readonly onDelete: (outcome: BusinessOutcome) => void;
+}
+
+function toNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatNumber(value: string | number | null | undefined): string {
+  const parsed = toNumber(value);
+  if (parsed === null) return "—";
+  return parsed.toLocaleString(undefined, {
+    maximumFractionDigits: 4,
+  });
+}
+
+function formatPercent(value: string | number | null | undefined): string {
+  const parsed = toNumber(value);
+  if (parsed === null) return "—";
+  return `${Math.max(0, Math.min(100, Math.round(parsed)))}%`;
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+export function BusinessOutcomesTable({
+  outcomes,
+  projects,
+  owners,
+  isMutating,
+  onEdit,
+  onDelete,
+}: BusinessOutcomesTableProps) {
+  const projectMap = new Map(
+    projects.map((project) => [project.id, `${project.name} (${project.key})`]),
+  );
+  const ownerMap = new Map(owners.map((owner) => [owner.id, owner.full_name]));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Title
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Project
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Owner
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Progress
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Target value
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Target date
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {outcomes.map((outcome) => {
+              const canDelete = outcome.status !== "abandoned";
+              return (
+                <tr
+                  key={outcome.id}
+                  className={cn(
+                    "transition-colors hover:bg-muted/30",
+                    outcome.status === "abandoned" && "opacity-70",
+                  )}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {outcome.name}
+                      </span>
+                      {outcome.description && (
+                        <span className="line-clamp-1 text-xs text-muted-foreground">
+                          {outcome.description}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {projectMap.get(outcome.organization_id) ?? "Organization-wide"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {outcome.owner_id
+                      ? ownerMap.get(outcome.owner_id) ?? "—"
+                      : "Unassigned"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <BusinessOutcomeStatusBadge status={outcome.status} />
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    <div className="flex flex-col">
+                      <span>{formatPercent(outcome.progress_percent)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatNumber(outcome.current_value)} /{" "}
+                        {formatNumber(outcome.target_value)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {formatNumber(outcome.target_value)}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatDate(outcome.target_date)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${outcome.name}`}
+                        onClick={() => onEdit(outcome)}
+                        disabled={isMutating}
+                        title="Edit outcome"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${outcome.name}`}
+                        onClick={() => onDelete(outcome)}
+                        disabled={isMutating || !canDelete}
+                        title={
+                          canDelete
+                            ? "Delete outcome"
+                            : "Abandoned outcomes cannot be deleted from the table"
+                        }
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive disabled:text-muted-foreground"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/CreateBusinessOutcomeDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  createBusinessOutcomeSchema,
+  emptyToNull,
+  type CreateBusinessOutcomeFormValues,
+} from "../businessOutcomeSchemas";
+import type {
+  CreateBusinessOutcomeInput,
+  OutcomeOwnerOption,
+} from "../types";
+import { Modal } from "./Modal";
+
+interface CreateBusinessOutcomeDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateBusinessOutcomeInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly owners: OutcomeOwnerOption[];
+  readonly ownersLoading: boolean;
+}
+
+export function CreateBusinessOutcomeDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  owners,
+  ownersLoading,
+}: CreateBusinessOutcomeDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateBusinessOutcomeFormValues>({
+    resolver: zodResolver(createBusinessOutcomeSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      hypothesis: "",
+      owner_id: "",
+      target_date: "",
+      baseline_value: "",
+      target_value: "",
+      current_value: "",
+      confidence_score: "",
+      financial_impact_estimate: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      name: "",
+      description: "",
+      hypothesis: "",
+      owner_id: "",
+      target_date: "",
+      baseline_value: "",
+      target_value: "",
+      current_value: "",
+      confidence_score: "",
+      financial_impact_estimate: "",
+    });
+  }, [open, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: CreateBusinessOutcomeInput = {
+        name: values.name.trim(),
+        description: emptyToNull(values.description),
+        hypothesis: emptyToNull(values.hypothesis),
+        owner_id: values.owner_id ? values.owner_id : null,
+        target_date: emptyToNull(values.target_date),
+        baseline_value: emptyToNull(values.baseline_value),
+        target_value: emptyToNull(values.target_value),
+        current_value: emptyToNull(values.current_value),
+        confidence_score: emptyToNull(values.confidence_score),
+        financial_impact_estimate: emptyToNull(values.financial_impact_estimate),
+      };
+      await onSubmit(input);
+      toast({ title: "Business outcome created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create outcome",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create business outcome"
+      description="Define a measurable outcome to trace engineering work against."
+      maxWidthClassName="max-w-2xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="bo-create-name">Name</Label>
+          <Input
+            id="bo-create-name"
+            placeholder="e.g. Increase Monthly Active Users"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-create-description">Description</Label>
+          <textarea
+            id="bo-create-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="What does success look like?"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-create-hypothesis">Hypothesis</Label>
+          <textarea
+            id="bo-create-hypothesis"
+            rows={2}
+            {...register("hypothesis")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Why do we believe delivering this drives the outcome?"
+          />
+          {errors.hypothesis && (
+            <p className="text-xs text-destructive">
+              {errors.hypothesis.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-owner">Owner</Label>
+            <select
+              id="bo-create-owner"
+              {...register("owner_id")}
+              disabled={ownersLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {ownersLoading ? "Loading…" : "Unassigned"}
+              </option>
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-target-date">Target date</Label>
+            <Input
+              id="bo-create-target-date"
+              type="date"
+              {...register("target_date")}
+              aria-invalid={Boolean(errors.target_date)}
+            />
+            {errors.target_date && (
+              <p className="text-xs text-destructive">
+                {errors.target_date.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-baseline">Baseline value</Label>
+            <Input
+              id="bo-create-baseline"
+              inputMode="decimal"
+              placeholder="e.g. 1000"
+              {...register("baseline_value")}
+              aria-invalid={Boolean(errors.baseline_value)}
+            />
+            {errors.baseline_value && (
+              <p className="text-xs text-destructive">
+                {errors.baseline_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-target">Target value</Label>
+            <Input
+              id="bo-create-target"
+              inputMode="decimal"
+              placeholder="e.g. 1500"
+              {...register("target_value")}
+              aria-invalid={Boolean(errors.target_value)}
+            />
+            {errors.target_value && (
+              <p className="text-xs text-destructive">
+                {errors.target_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-current">Current value</Label>
+            <Input
+              id="bo-create-current"
+              inputMode="decimal"
+              placeholder="e.g. 1150"
+              {...register("current_value")}
+              aria-invalid={Boolean(errors.current_value)}
+            />
+            {errors.current_value && (
+              <p className="text-xs text-destructive">
+                {errors.current_value.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-confidence">Confidence score (%)</Label>
+            <Input
+              id="bo-create-confidence"
+              inputMode="decimal"
+              placeholder="0 – 100"
+              {...register("confidence_score")}
+              aria-invalid={Boolean(errors.confidence_score)}
+            />
+            {errors.confidence_score && (
+              <p className="text-xs text-destructive">
+                {errors.confidence_score.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-create-impact">Financial impact estimate</Label>
+            <Input
+              id="bo-create-impact"
+              inputMode="decimal"
+              placeholder="e.g. 250000"
+              {...register("financial_impact_estimate")}
+              aria-invalid={Boolean(errors.financial_impact_estimate)}
+            />
+            {errors.financial_impact_estimate && (
+              <p className="text-xs text-destructive">
+                {errors.financial_impact_estimate.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create outcome"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/EditBusinessOutcomeDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  OUTCOME_STATUS_OPTIONS,
+  editBusinessOutcomeSchema,
+  emptyToNull,
+  type EditBusinessOutcomeFormValues,
+} from "../businessOutcomeSchemas";
+import type {
+  BusinessOutcome,
+  OutcomeOwnerOption,
+  UpdateBusinessOutcomeInput,
+} from "../types";
+import { Modal } from "./Modal";
+import { OUTCOME_STATUS_LABELS } from "./BusinessOutcomeStatusBadge";
+
+interface EditBusinessOutcomeDialogProps {
+  readonly open: boolean;
+  readonly outcome: BusinessOutcome | null;
+  readonly owners: OutcomeOwnerOption[];
+  readonly ownersLoading: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (
+    id: string,
+    input: UpdateBusinessOutcomeInput,
+  ) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+function toStringOrEmpty(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+export function EditBusinessOutcomeDialog({
+  open,
+  outcome,
+  owners,
+  ownersLoading,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: EditBusinessOutcomeDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditBusinessOutcomeFormValues>({
+    resolver: zodResolver(editBusinessOutcomeSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      hypothesis: "",
+      owner_id: "",
+      status: "proposed",
+      target_date: "",
+      baseline_value: "",
+      target_value: "",
+      current_value: "",
+      confidence_score: "",
+      financial_impact_estimate: "",
+    },
+  });
+
+  useEffect(() => {
+    if (open && outcome) {
+      reset({
+        name: outcome.name,
+        description: outcome.description ?? "",
+        hypothesis: outcome.hypothesis ?? "",
+        owner_id: outcome.owner_id ?? "",
+        status: outcome.status,
+        target_date: outcome.target_date ?? "",
+        baseline_value: toStringOrEmpty(outcome.baseline_value),
+        target_value: toStringOrEmpty(outcome.target_value),
+        current_value: toStringOrEmpty(outcome.current_value),
+        confidence_score: toStringOrEmpty(outcome.confidence_score),
+        financial_impact_estimate: toStringOrEmpty(
+          outcome.financial_impact_estimate,
+        ),
+      });
+    }
+  }, [open, outcome, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!outcome) return;
+    try {
+      const input: UpdateBusinessOutcomeInput = {
+        name: values.name.trim(),
+        description: emptyToNull(values.description),
+        hypothesis: emptyToNull(values.hypothesis),
+        owner_id: values.owner_id ? values.owner_id : null,
+        status: values.status,
+        target_date: emptyToNull(values.target_date),
+        baseline_value: emptyToNull(values.baseline_value),
+        target_value: emptyToNull(values.target_value),
+        current_value: emptyToNull(values.current_value),
+        confidence_score: emptyToNull(values.confidence_score),
+        financial_impact_estimate: emptyToNull(
+          values.financial_impact_estimate,
+        ),
+      };
+      await onSubmit(outcome.id, input);
+      toast({ title: "Business outcome updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update outcome",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && outcome !== null}
+      onClose={onClose}
+      title={`Edit ${outcome?.name ?? "outcome"}`}
+      description={outcome ? `Status: ${outcome.status}` : undefined}
+      maxWidthClassName="max-w-2xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="bo-edit-name">Name</Label>
+          <Input
+            id="bo-edit-name"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-edit-description">Description</Label>
+          <textarea
+            id="bo-edit-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bo-edit-hypothesis">Hypothesis</Label>
+          <textarea
+            id="bo-edit-hypothesis"
+            rows={2}
+            {...register("hypothesis")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {errors.hypothesis && (
+            <p className="text-xs text-destructive">
+              {errors.hypothesis.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-status">Status</Label>
+            <select
+              id="bo-edit-status"
+              {...register("status")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {OUTCOME_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {OUTCOME_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-owner">Owner</Label>
+            <select
+              id="bo-edit-owner"
+              {...register("owner_id")}
+              disabled={ownersLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {ownersLoading ? "Loading…" : "Unassigned"}
+              </option>
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-target-date">Target date</Label>
+            <Input
+              id="bo-edit-target-date"
+              type="date"
+              {...register("target_date")}
+              aria-invalid={Boolean(errors.target_date)}
+            />
+            {errors.target_date && (
+              <p className="text-xs text-destructive">
+                {errors.target_date.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-baseline">Baseline value</Label>
+            <Input
+              id="bo-edit-baseline"
+              inputMode="decimal"
+              {...register("baseline_value")}
+              aria-invalid={Boolean(errors.baseline_value)}
+            />
+            {errors.baseline_value && (
+              <p className="text-xs text-destructive">
+                {errors.baseline_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-target">Target value</Label>
+            <Input
+              id="bo-edit-target"
+              inputMode="decimal"
+              {...register("target_value")}
+              aria-invalid={Boolean(errors.target_value)}
+            />
+            {errors.target_value && (
+              <p className="text-xs text-destructive">
+                {errors.target_value.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-current">Current value</Label>
+            <Input
+              id="bo-edit-current"
+              inputMode="decimal"
+              {...register("current_value")}
+              aria-invalid={Boolean(errors.current_value)}
+            />
+            {errors.current_value && (
+              <p className="text-xs text-destructive">
+                {errors.current_value.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-confidence">Confidence score (%)</Label>
+            <Input
+              id="bo-edit-confidence"
+              inputMode="decimal"
+              {...register("confidence_score")}
+              aria-invalid={Boolean(errors.confidence_score)}
+            />
+            {errors.confidence_score && (
+              <p className="text-xs text-destructive">
+                {errors.confidence_score.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bo-edit-impact">Financial impact estimate</Label>
+            <Input
+              id="bo-edit-impact"
+              inputMode="decimal"
+              {...register("financial_impact_estimate")}
+              aria-invalid={Boolean(errors.financial_impact_estimate)}
+            />
+            {errors.financial_impact_estimate && (
+              <p className="text-xs text-destructive">
+                {errors.financial_impact_estimate.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/DeleteBusinessOutcomeDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { BusinessOutcome } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteBusinessOutcomeDialogProps {
+  readonly open: boolean;
+  readonly outcome: BusinessOutcome | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteBusinessOutcomeDialog({
+  open,
+  outcome,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteBusinessOutcomeDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!outcome) return;
+    try {
+      await onConfirm(outcome.id);
+      toast({ title: "Business outcome deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete outcome",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && outcome !== null}
+      onClose={onClose}
+      title="Delete business outcome"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {outcome ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{outcome.name}</span>.
+                </>
+              ) : (
+                "Outcome details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !outcome}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete outcome"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/BusinessOutcomesLoadingState.tsx
+
+```tsx
+export function BusinessOutcomesLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/components/BusinessOutcomesErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface BusinessOutcomesErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function BusinessOutcomesErrorState({
+  message,
+  onRetry,
+}: BusinessOutcomesErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">
+          Failed to load business outcomes
+        </h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/business-outcomes/index.ts
+
+```ts
+export { businessOutcomesApi } from "./businessOutcomesApi";
+export { useBusinessOutcomes } from "./useBusinessOutcomes";
+export { useProjectOptions } from "./useProjectOptions";
+export { useKpiOptions } from "./useKpiOptions";
+export type {
+  BusinessOutcome,
+  BusinessOutcomeListParams,
+  CreateBusinessOutcomeInput,
+  OutcomeKpiOption,
+  OutcomeOwnerOption,
+  OutcomeProjectOption,
+  OutcomeStatus,
+  PaginatedBusinessOutcomes,
+  UpdateBusinessOutcomeInput,
+} from "./types";
+export { BusinessOutcomeFilters } from "./components/BusinessOutcomeFilters";
+export { BusinessOutcomeStatusBadge } from "./components/BusinessOutcomeStatusBadge";
+export { BusinessOutcomesErrorState } from "./components/BusinessOutcomesErrorState";
+export { BusinessOutcomesLoadingState } from "./components/BusinessOutcomesLoadingState";
+export { BusinessOutcomesTable } from "./components/BusinessOutcomesTable";
+export { CreateBusinessOutcomeDialog } from "./components/CreateBusinessOutcomeDialog";
+export { DeleteBusinessOutcomeDialog } from "./components/DeleteBusinessOutcomeDialog";
+export { EditBusinessOutcomeDialog } from "./components/EditBusinessOutcomeDialog";
+export { Modal as BusinessOutcomeModal } from "./components/Modal";
+export { Pagination as BusinessOutcomesPagination } from "./components/Pagination";
+```
+
+### frontend/src/pages/business-outcomes/BusinessOutcomesPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  BusinessOutcomeFilters,
+  BusinessOutcomesErrorState,
+  BusinessOutcomesLoadingState,
+  BusinessOutcomesPagination,
+  BusinessOutcomesTable,
+  CreateBusinessOutcomeDialog,
+  DeleteBusinessOutcomeDialog,
+  EditBusinessOutcomeDialog,
+  useBusinessOutcomes,
+  useProjectOptions,
+  type BusinessOutcome,
+  type OutcomeStatus,
+} from "@/features/business-outcomes";
+
+const PAGE_SIZE = 20;
+
+export default function BusinessOutcomesPage() {
+  const {
+    data,
+    items,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setOwnerId,
+    setStatuses,
+    setSearch,
+    setTargetBefore,
+    setTargetAfter,
+    setPage,
+    resetFilters,
+    refresh,
+    createOutcome,
+    updateOutcome,
+    deleteOutcome,
+  } = useBusinessOutcomes({ limit: PAGE_SIZE });
+
+  const {
+    projects,
+    owners,
+    isLoadingProjects,
+    isLoadingOwners,
+  } = useProjectOptions();
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<BusinessOutcome | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BusinessOutcome | null>(
+    null,
+  );
+
+  const handleStatus = (value: OutcomeStatus | "") => {
+    setStatuses(value ? [value] : []);
+  };
+
+  const totalCount = data?.total ?? 0;
+  const hasResults = items.length > 0;
+  const filtersActive =
+    filters.search.trim().length > 0 ||
+    filters.ownerId !== null ||
+    filters.statuses.length > 0 ||
+    filters.targetBefore !== null ||
+    filters.targetAfter !== null;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Business outcomes
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track the measurable outcomes engineering work is expected to drive.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New outcome
+        </Button>
+      </header>
+
+      <BusinessOutcomeFilters
+        owners={owners}
+        isLoadingOwners={isLoadingOwners}
+        ownerId={filters.ownerId}
+        statuses={filters.statuses}
+        search={filters.search}
+        targetBefore={filters.targetBefore}
+        targetAfter={filters.targetAfter}
+        onOwnerChange={setOwnerId}
+        onStatusChange={handleStatus}
+        onSearchChange={setSearch}
+        onTargetBeforeChange={setTargetBefore}
+        onTargetAfterChange={setTargetAfter}
+        onReset={resetFilters}
+      />
+
+      {isLoading && !data ? (
+        <BusinessOutcomesLoadingState />
+      ) : error ? (
+        <BusinessOutcomesErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            filtersActive
+              ? "No outcomes match your filters"
+              : "No business outcomes yet"
+          }
+          description={
+            filtersActive
+              ? "Try broadening the search or clearing filters."
+              : "Create your first outcome to start tracing engineering work to business value."
+          }
+          action={
+            <div className="flex items-center gap-2">
+              {filtersActive && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetFilters}
+                >
+                  Reset filters
+                </Button>
+              )}
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New outcome
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <BusinessOutcomesTable
+            outcomes={items}
+            projects={projects}
+            owners={owners}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+          />
+          <BusinessOutcomesPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateBusinessOutcomeDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createOutcome(input);
+        }}
+        isSubmitting={isMutating}
+        owners={owners}
+        ownersLoading={isLoadingOwners || isLoadingProjects}
+      />
+
+      <EditBusinessOutcomeDialog
+        open={editTarget !== null}
+        outcome={editTarget}
+        owners={owners}
+        ownersLoading={isLoadingOwners}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateOutcome(id, input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <DeleteBusinessOutcomeDialog
+        open={deleteTarget !== null}
+        outcome={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteOutcome(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `BusinessOutcomesPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const BusinessOutcomesPage = lazy(
+  () => import("@/pages/business-outcomes/BusinessOutcomesPage"),
+);
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.BUSINESS_OUTCOMES}
+  element={<ModulePlaceholder title="Business Outcomes" />}
+/>
+```
+
+with:
+
+```tsx
+<Route
+  path={ROUTES.BUSINESS_OUTCOMES}
+  element={<BusinessOutcomesPage />}
+/>
+```
+
+No other lines in `AppRouter.tsx` need to change.

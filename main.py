@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk__s-4ZUpPMgxicto4jR8HL0ipVwU6HlIcp7dbvIxg-4I",
+    api_key="sk_dVv0fkSqOX8QeN2nWbQ1B_cOsZqN2Y1V5M0h9bLCdp4",
 )
 
 model = "claude-opus-4-7"
@@ -90,20 +90,21 @@ messages.append({
     "content": """
     You are extending an existing React + TypeScript SaaS frontend.
 
-The application already has:
+The application already has fully working modules:
 
 - Authentication
 - Dashboard
-- Projects module
-- Sprints module
+- Projects
+- Sprints
+- Work Items
 
-These modules are COMPLETE and WORKING.
+Do NOT modify or regenerate any existing shared files.
 
 ====================================================
-IMPORTANT RULES (READ CAREFULLY)
+STRICT RULES
 ====================================================
 
-DO NOT modify, overwrite, regenerate, delete or reformat ANY existing files.
+Never overwrite, regenerate, delete or reformat existing files.
 
 Especially DO NOT touch:
 
@@ -115,16 +116,17 @@ src/features/auth/*
 src/App.tsx
 src/main.tsx
 
-If any shared file requires changes,
-DO NOT regenerate it.
+If routing needs to change:
 
-Instead output a section named:
+DO NOT modify AppRouter.tsx.
 
+Instead output:
+
+=========================
 MANUAL ROUTER PATCH
+=========================
 
-showing only the exact code that must be manually replaced.
-
-Never rewrite existing files.
+showing ONLY the exact replacement.
 
 Return ONLY newly created files.
 
@@ -132,68 +134,60 @@ Return ONLY newly created files.
 TASK
 ====================================================
 
-Generate a complete Work Items module.
+Generate a complete Business Outcomes module.
 
 Create ONLY these files:
 
-src/features/work-items/
+src/features/business-outcomes/
     types.ts
-    workItemsApi.ts
-    workItemSchemas.ts
-    useWorkItems.ts
-    useSprintOptions.ts
-    useAssigneeOptions.ts
+    businessOutcomesApi.ts
+    businessOutcomeSchemas.ts
+    useBusinessOutcomes.ts
+    useProjectOptions.ts
+    useKpiOptions.ts
 
-src/features/work-items/components/
-    WorkItemsTable.tsx
-    WorkItemFilters.tsx
-    WorkItemStatusBadge.tsx
+src/features/business-outcomes/components/
+    BusinessOutcomesTable.tsx
+    BusinessOutcomeFilters.tsx
+    BusinessOutcomeStatusBadge.tsx
     Pagination.tsx
     Modal.tsx
-    CreateWorkItemDialog.tsx
-    EditWorkItemDialog.tsx
-    DeleteWorkItemDialog.tsx
-    WorkItemsLoadingState.tsx
-    WorkItemsErrorState.tsx
+    CreateBusinessOutcomeDialog.tsx
+    EditBusinessOutcomeDialog.tsx
+    DeleteBusinessOutcomeDialog.tsx
+    BusinessOutcomesLoadingState.tsx
+    BusinessOutcomesErrorState.tsx
 
-src/features/work-items/index.ts
+src/features/business-outcomes/index.ts
 
-src/pages/work-items/WorkItemsPage.tsx
+src/pages/business-outcomes/BusinessOutcomesPage.tsx
 
 ====================================================
-WORK ITEM MODEL
+BUSINESS OUTCOME MODEL
 ====================================================
 
-Each work item should support:
+Each Business Outcome contains:
 
 - id
 - title
 - description
-- sprintId
-- assigneeId
-- priority
+- projectId
+- ownerId
 - status
-- estimate
-- storyPoints
-- dueDate
+- targetValue
+- currentValue
+- unit
+- targetDate
 - createdAt
 - updatedAt
 
-Priority:
+Status values:
 
-- Low
-- Medium
-- High
-- Critical
-
-Status:
-
-- Backlog
-- Todo
+- Planned
 - In Progress
-- In Review
-- Done
-- Blocked
+- At Risk
+- Achieved
+- Cancelled
 
 ====================================================
 PAGE FEATURES
@@ -207,8 +201,8 @@ Implement:
 ✔ Loading state
 ✔ Empty state
 ✔ Error state
-✔ Create Work Item dialog
-✔ Edit Work Item dialog
+✔ Create dialog
+✔ Edit dialog
 ✔ Delete confirmation dialog
 
 ====================================================
@@ -218,12 +212,12 @@ TABLE
 Columns:
 
 - Title
-- Sprint
-- Assignee
-- Priority
+- Project
+- Owner
 - Status
-- Story Points
-- Due Date
+- Current Progress
+- Target Value
+- Target Date
 - Actions
 
 Actions:
@@ -235,9 +229,13 @@ Actions:
 API
 ====================================================
 
-Use the same API patterns already used by Projects and Sprints.
+Follow the exact same architecture and coding style used by:
 
-Do not invent a different architecture.
+- Projects
+- Sprints
+- Work Items
+
+Do NOT invent a different architecture.
 
 ====================================================
 OUTPUT FORMAT
@@ -247,13 +245,12 @@ Return ONLY new files.
 
 Do NOT regenerate existing files.
 
-If routing changes are required, output ONLY:
+If AppRouter.tsx requires modification,
+output ONLY:
 
 MANUAL ROUTER PATCH
 
-with the exact replacement needed inside AppRouter.tsx.
-
-No other shared files should be modified.
+Do not modify any shared files.
      """
 })
 # -----------------------------
