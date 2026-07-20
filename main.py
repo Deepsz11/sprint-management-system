@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_YVx9v-81fBcOlmx8zSMcqWdApGkQdDKyzGl2hVANZlE",
+    api_key="sk_1U_dqvTbzuNPCHqsvqt645Cl9E0gM_R7HZAp3psk704",
 )
 
 model = "claude-opus-4-7"
@@ -90,37 +90,34 @@ messages.append({
     "content": """
     You are extending an existing React + TypeScript SaaS frontend.
 
-The frontend foundation is COMPLETE and WORKING.
+The frontend foundation and Projects module are COMPLETE and WORKING.
 
 IMPORTANT
 
 Do NOT modify, overwrite, regenerate or delete any existing shared files.
 
-Especially DO NOT touch:
+Do NOT touch:
 
-- src/router/AppRouter.tsx
-- src/router/ProtectedRoute.tsx
-- src/router/PublicRoute.tsx
+- src/router/*
 - src/components/layout/*
-- src/config/routes.ts
-- src/config/navigation.ts
+- src/config/*
 - src/features/auth/*
 - src/providers/*
 - src/App.tsx
 - src/main.tsx
 
-Generate ONLY the Projects feature.
+Generate ONLY the Sprints feature.
 
 Create:
 
-- src/features/projects/*
-- src/pages/projects/ProjectsPage.tsx
-- Project API layer
+- src/features/sprints/*
+- src/pages/sprints/SprintsPage.tsx
+- Sprint API layer
 - Types
 - Hooks
 - Table
-- Create Project dialog
-- Edit Project dialog
+- Create Sprint dialog
+- Edit Sprint dialog
 - Delete confirmation
 - Search
 - Pagination
@@ -131,13 +128,10 @@ Create:
 If routing needs to change,
 DO NOT modify AppRouter.tsx.
 
-Instead, output a separate section called:
+Instead output:
 
 MANUAL ROUTER PATCH
 
-showing exactly what lines need to be added.
-
-Do not overwrite existing files.
 Return only newly created files.
      """
 })

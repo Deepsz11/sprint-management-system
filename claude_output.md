@@ -22802,3 +22802,1969 @@ with:
 ```
 
 No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/sprints/types.ts
+
+```ts
+export type SprintStatus =
+  | "planned"
+  | "active"
+  | "completed"
+  | "cancelled";
+
+export interface Sprint {
+  readonly id: string;
+  readonly project_id: string;
+  readonly name: string;
+  readonly goal: string | null;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly status: SprintStatus;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly planned_capacity: number;
+  readonly completed_points: number;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface SprintProjectOption {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly team_id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly slug: string;
+  readonly is_archived: boolean;
+}
+
+export interface PaginatedSprints {
+  readonly items: Sprint[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedSprintProjects {
+  readonly items: SprintProjectOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CreateSprintInput {
+  readonly project_id: string;
+  readonly name: string;
+  readonly goal?: string | null;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly planned_capacity: number;
+}
+
+export interface UpdateSprintInput {
+  readonly name?: string;
+  readonly goal?: string | null;
+  readonly start_date?: string;
+  readonly end_date?: string;
+  readonly planned_capacity?: number;
+}
+
+export interface CompleteSprintInput {
+  readonly completed_points: number;
+}
+
+export interface SprintListParams {
+  readonly project_id: string;
+  readonly limit: number;
+  readonly offset: number;
+}
+```
+
+### frontend/src/features/sprints/sprintsApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  CompleteSprintInput,
+  CreateSprintInput,
+  PaginatedSprintProjects,
+  PaginatedSprints,
+  Sprint,
+  SprintListParams,
+  UpdateSprintInput,
+} from "./types";
+
+export const sprintsApi = {
+  async list(params: SprintListParams): Promise<PaginatedSprints> {
+    const response = await apiClient.get<PaginatedSprints>(
+      API_ENDPOINTS.SPRINTS,
+      {
+        params: {
+          project_id: params.project_id,
+          limit: params.limit,
+          offset: params.offset,
+        },
+      },
+    );
+    return response.data;
+  },
+
+  async get(id: string): Promise<Sprint> {
+    const response = await apiClient.get<Sprint>(
+      `${API_ENDPOINTS.SPRINTS}/${id}`,
+    );
+    return response.data;
+  },
+
+  async create(input: CreateSprintInput): Promise<Sprint> {
+    const response = await apiClient.post<Sprint>(
+      API_ENDPOINTS.SPRINTS,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(id: string, input: UpdateSprintInput): Promise<Sprint> {
+    const response = await apiClient.patch<Sprint>(
+      `${API_ENDPOINTS.SPRINTS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.SPRINTS}/${id}`);
+  },
+
+  async start(id: string): Promise<Sprint> {
+    const response = await apiClient.post<Sprint>(
+      `${API_ENDPOINTS.SPRINTS}/${id}/start`,
+    );
+    return response.data;
+  },
+
+  async complete(id: string, input: CompleteSprintInput): Promise<Sprint> {
+    const response = await apiClient.post<Sprint>(
+      `${API_ENDPOINTS.SPRINTS}/${id}/complete`,
+      input,
+    );
+    return response.data;
+  },
+
+  async listProjects(): Promise<PaginatedSprintProjects> {
+    const response = await apiClient.get<PaginatedSprintProjects>(
+      API_ENDPOINTS.PROJECTS,
+      {
+        params: { limit: 200, offset: 0, include_archived: false },
+      },
+    );
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/sprints/sprintSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const dateString = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+
+const optionalGoal = z
+  .string()
+  .trim()
+  .max(2000, "Goal must be 2000 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+export const createSprintSchema = z
+  .object({
+    project_id: z.string().uuid("Select a project"),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(200, "Name must be 200 characters or fewer"),
+    goal: optionalGoal,
+    start_date: dateString,
+    end_date: dateString,
+    planned_capacity: z
+      .coerce.number({ invalid_type_error: "Enter a number" })
+      .int("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .max(10000, "Value is too large"),
+  })
+  .superRefine((values, ctx) => {
+    if (values.end_date < values.start_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End date cannot be before start date",
+        path: ["end_date"],
+      });
+    }
+  });
+
+export type CreateSprintFormValues = z.infer<typeof createSprintSchema>;
+
+export const editSprintSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(200, "Name must be 200 characters or fewer"),
+    goal: optionalGoal,
+    start_date: dateString,
+    end_date: dateString,
+    planned_capacity: z
+      .coerce.number({ invalid_type_error: "Enter a number" })
+      .int("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .max(10000, "Value is too large"),
+  })
+  .superRefine((values, ctx) => {
+    if (values.end_date < values.start_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End date cannot be before start date",
+        path: ["end_date"],
+      });
+    }
+  });
+
+export type EditSprintFormValues = z.infer<typeof editSprintSchema>;
+
+export const completeSprintSchema = z.object({
+  completed_points: z
+    .coerce.number({ invalid_type_error: "Enter a number" })
+    .int("Must be a whole number")
+    .min(0, "Cannot be negative")
+    .max(100000, "Value is too large"),
+});
+
+export type CompleteSprintFormValues = z.infer<typeof completeSprintSchema>;
+```
+
+### frontend/src/features/sprints/useSprintProjects.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { sprintsApi } from "./sprintsApi";
+import type { SprintProjectOption } from "./types";
+
+interface UseSprintProjectsResult {
+  readonly projects: SprintProjectOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useSprintProjects(): UseSprintProjectsResult {
+  const [projects, setProjects] = useState<SprintProjectOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await sprintsApi.listProjects();
+        if (!cancelled) setProjects(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { projects, isLoading, error };
+}
+```
+
+### frontend/src/features/sprints/useSprints.ts
+
+```ts
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { sprintsApi } from "./sprintsApi";
+import type {
+  CompleteSprintInput,
+  CreateSprintInput,
+  PaginatedSprints,
+  Sprint,
+  UpdateSprintInput,
+} from "./types";
+
+interface UseSprintsOptions {
+  readonly limit: number;
+}
+
+interface UseSprintsResult {
+  readonly data: PaginatedSprints | null;
+  readonly filtered: Sprint[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly search: string;
+  readonly projectId: string | null;
+  readonly setSearch: (value: string) => void;
+  readonly setProjectId: (value: string | null) => void;
+  readonly setPage: (page: number) => void;
+  readonly refresh: () => Promise<void>;
+  readonly createSprint: (input: CreateSprintInput) => Promise<Sprint>;
+  readonly updateSprint: (
+    id: string,
+    input: UpdateSprintInput,
+  ) => Promise<Sprint>;
+  readonly deleteSprint: (id: string) => Promise<void>;
+  readonly startSprint: (id: string) => Promise<Sprint>;
+  readonly completeSprint: (
+    id: string,
+    input: CompleteSprintInput,
+  ) => Promise<Sprint>;
+}
+
+export function useSprints(
+  options: UseSprintsOptions = { limit: 20 },
+): UseSprintsResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedSprints | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [search, setSearch] = useState<string>("");
+  const [projectId, setProjectIdState] = useState<string | null>(null);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number, projId: string | null) => {
+      if (!projId) {
+        setData(null);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await sprintsApi.list({
+          project_id: projId,
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+        });
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page, projectId);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page, projectId]);
+
+  const setProjectId = useCallback((value: string | null) => {
+    setProjectIdState(value);
+    setPage(1);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page, projectId);
+  }, [load, page, projectId]);
+
+  const createSprint = useCallback(
+    async (input: CreateSprintInput) => {
+      setIsMutating(true);
+      try {
+        const created = await sprintsApi.create(input);
+        setProjectIdState(input.project_id);
+        setPage(1);
+        await load(1, input.project_id);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load],
+  );
+
+  const updateSprint = useCallback(
+    async (id: string, input: UpdateSprintInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await sprintsApi.update(id, input);
+        await load(page, projectId);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, projectId],
+  );
+
+  const deleteSprint = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await sprintsApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage, projectId);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page, projectId],
+  );
+
+  const startSprint = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        const started = await sprintsApi.start(id);
+        await load(page, projectId);
+        return started;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, projectId],
+  );
+
+  const completeSprint = useCallback(
+    async (id: string, input: CompleteSprintInput) => {
+      setIsMutating(true);
+      try {
+        const completed = await sprintsApi.complete(id, input);
+        await load(page, projectId);
+        return completed;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, projectId],
+  );
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const term = search.trim().toLowerCase();
+    if (!term) return data.items;
+    return data.items.filter((sprint) => {
+      return (
+        sprint.name.toLowerCase().includes(term) ||
+        (sprint.goal ?? "").toLowerCase().includes(term) ||
+        sprint.status.toLowerCase().includes(term)
+      );
+    });
+  }, [data, search]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    search,
+    projectId,
+    setSearch,
+    setProjectId,
+    setPage,
+    refresh,
+    createSprint,
+    updateSprint,
+    deleteSprint,
+    startSprint,
+    completeSprint,
+  };
+}
+```
+
+### frontend/src/features/sprints/components/SprintStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+import type { SprintStatus } from "../types";
+
+interface SprintStatusBadgeProps {
+  readonly status: SprintStatus;
+}
+
+const STYLES: Record<SprintStatus, string> = {
+  planned:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  active:
+    "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  completed:
+    "border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  cancelled: "border border-border bg-muted text-muted-foreground",
+};
+
+const LABELS: Record<SprintStatus, string> = {
+  planned: "Planned",
+  active: "Active",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export function SprintStatusBadge({ status }: SprintStatusBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STYLES[status],
+      )}
+    >
+      {LABELS[status]}
+    </span>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/SprintFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+
+import type { SprintProjectOption } from "../types";
+
+interface SprintFiltersProps {
+  readonly projects: SprintProjectOption[];
+  readonly isLoadingProjects: boolean;
+  readonly projectId: string | null;
+  readonly onProjectChange: (id: string | null) => void;
+  readonly search: string;
+  readonly onSearchChange: (value: string) => void;
+}
+
+export function SprintFilters({
+  projects,
+  isLoadingProjects,
+  projectId,
+  onProjectChange,
+  search,
+  onSearchChange,
+}: SprintFiltersProps) {
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-1 flex-col gap-2 md:max-w-xs">
+        <Label htmlFor="sprint-project">Project</Label>
+        <select
+          id="sprint-project"
+          value={projectId ?? ""}
+          onChange={(event) =>
+            onProjectChange(event.target.value ? event.target.value : null)
+          }
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          disabled={isLoadingProjects}
+        >
+          <option value="">
+            {isLoadingProjects ? "Loading projects…" : "Select a project"}
+          </option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name} ({project.key})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 md:max-w-sm">
+        <Label htmlFor="sprint-search">Search</Label>
+        <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            id="sprint-search"
+            type="search"
+            placeholder="Name, goal, or status…"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            className="pl-9"
+            disabled={!projectId}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/SprintsTable.tsx
+
+```tsx
+import { Flag, Pencil, PlayCircle, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type { Sprint } from "../types";
+import { SprintStatusBadge } from "./SprintStatusBadge";
+
+interface SprintsTableProps {
+  readonly sprints: Sprint[];
+  readonly onEdit: (sprint: Sprint) => void;
+  readonly onDelete: (sprint: Sprint) => void;
+  readonly onStart: (sprint: Sprint) => void;
+  readonly onComplete: (sprint: Sprint) => void;
+  readonly isMutating: boolean;
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+function percent(sprint: Sprint): string {
+  if (sprint.planned_capacity <= 0) return "—";
+  const value = (sprint.completed_points / sprint.planned_capacity) * 100;
+  return `${Math.min(999, Math.max(0, Math.round(value)))}%`;
+}
+
+export function SprintsTable({
+  sprints,
+  onEdit,
+  onDelete,
+  onStart,
+  onComplete,
+  isMutating,
+}: SprintsTableProps) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Name
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Window
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Capacity
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Completion
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {sprints.map((sprint) => {
+              const canStart = sprint.status === "planned";
+              const canComplete = sprint.status === "active";
+              const canEdit =
+                sprint.status !== "completed" && sprint.status !== "cancelled";
+              const canDelete = sprint.status !== "completed";
+
+              return (
+                <tr
+                  key={sprint.id}
+                  className={cn(
+                    "transition-colors hover:bg-muted/30",
+                    sprint.status === "cancelled" && "opacity-70",
+                  )}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {sprint.name}
+                      </span>
+                      {sprint.goal && (
+                        <span className="line-clamp-1 text-xs text-muted-foreground">
+                          {sprint.goal}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <SprintStatusBadge status={sprint.status} />
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <div className="flex flex-col">
+                      <span>{formatDate(sprint.start_date)}</span>
+                      <span className="text-xs opacity-80">
+                        → {formatDate(sprint.end_date)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {sprint.planned_capacity}
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    <div className="flex flex-col">
+                      <span>
+                        {sprint.completed_points} / {sprint.planned_capacity}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {percent(sprint)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {canStart && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Start ${sprint.name}`}
+                          onClick={() => onStart(sprint)}
+                          disabled={isMutating}
+                          title="Start sprint"
+                        >
+                          <PlayCircle className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canComplete && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Complete ${sprint.name}`}
+                          onClick={() => onComplete(sprint)}
+                          disabled={isMutating}
+                          title="Complete sprint"
+                        >
+                          <Flag className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${sprint.name}`}
+                        onClick={() => onEdit(sprint)}
+                        disabled={isMutating || !canEdit}
+                        title="Edit sprint"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${sprint.name}`}
+                        onClick={() => onDelete(sprint)}
+                        disabled={isMutating || !canDelete}
+                        title={
+                          canDelete
+                            ? "Delete sprint"
+                            : "Completed sprints cannot be deleted"
+                        }
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive disabled:text-muted-foreground"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/CreateSprintDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  createSprintSchema,
+  type CreateSprintFormValues,
+} from "../sprintSchemas";
+import type { CreateSprintInput, SprintProjectOption } from "../types";
+import { Modal } from "./Modal";
+
+interface CreateSprintDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateSprintInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly projects: SprintProjectOption[];
+  readonly projectsLoading: boolean;
+  readonly defaultProjectId: string | null;
+}
+
+export function CreateSprintDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  projects,
+  projectsLoading,
+  defaultProjectId,
+}: CreateSprintDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateSprintFormValues>({
+    resolver: zodResolver(createSprintSchema),
+    defaultValues: {
+      project_id: defaultProjectId ?? "",
+      name: "",
+      goal: "",
+      start_date: "",
+      end_date: "",
+      planned_capacity: 0,
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      reset({
+        project_id: defaultProjectId ?? "",
+        name: "",
+        goal: "",
+        start_date: "",
+        end_date: "",
+        planned_capacity: 0,
+      });
+    }
+  }, [open, defaultProjectId, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: CreateSprintInput = {
+        project_id: values.project_id,
+        name: values.name.trim(),
+        goal: values.goal ? values.goal.trim() : null,
+        start_date: values.start_date,
+        end_date: values.end_date,
+        planned_capacity: values.planned_capacity,
+      };
+      await onSubmit(input);
+      toast({ title: "Sprint created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create sprint",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create sprint"
+      description="Time-box a scope of work and track its outcome."
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="create-project">Project</Label>
+          <select
+            id="create-project"
+            {...register("project_id")}
+            disabled={projectsLoading}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-invalid={Boolean(errors.project_id)}
+          >
+            <option value="">
+              {projectsLoading ? "Loading projects…" : "Select a project"}
+            </option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name} ({project.key})
+              </option>
+            ))}
+          </select>
+          {errors.project_id && (
+            <p className="text-xs text-destructive">
+              {errors.project_id.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="create-name">Name</Label>
+          <Input
+            id="create-name"
+            placeholder="e.g. Sprint 12 — Onboarding polish"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="create-goal">Goal</Label>
+          <textarea
+            id="create-goal"
+            rows={3}
+            {...register("goal")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="What outcome should this sprint deliver?"
+          />
+          {errors.goal && (
+            <p className="text-xs text-destructive">{errors.goal.message}</p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="create-start">Start date</Label>
+            <Input
+              id="create-start"
+              type="date"
+              {...register("start_date")}
+              aria-invalid={Boolean(errors.start_date)}
+            />
+            {errors.start_date && (
+              <p className="text-xs text-destructive">
+                {errors.start_date.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="create-end">End date</Label>
+            <Input
+              id="create-end"
+              type="date"
+              {...register("end_date")}
+              aria-invalid={Boolean(errors.end_date)}
+            />
+            {errors.end_date && (
+              <p className="text-xs text-destructive">
+                {errors.end_date.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="create-capacity">Planned capacity (points)</Label>
+          <Input
+            id="create-capacity"
+            type="number"
+            min={0}
+            step={1}
+            {...register("planned_capacity")}
+            aria-invalid={Boolean(errors.planned_capacity)}
+          />
+          {errors.planned_capacity && (
+            <p className="text-xs text-destructive">
+              {errors.planned_capacity.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create sprint"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/EditSprintDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  editSprintSchema,
+  type EditSprintFormValues,
+} from "../sprintSchemas";
+import type { Sprint, UpdateSprintInput } from "../types";
+import { Modal } from "./Modal";
+
+interface EditSprintDialogProps {
+  readonly open: boolean;
+  readonly sprint: Sprint | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: UpdateSprintInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function EditSprintDialog({
+  open,
+  sprint,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: EditSprintDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditSprintFormValues>({
+    resolver: zodResolver(editSprintSchema),
+    defaultValues: {
+      name: "",
+      goal: "",
+      start_date: "",
+      end_date: "",
+      planned_capacity: 0,
+    },
+  });
+
+  useEffect(() => {
+    if (open && sprint) {
+      reset({
+        name: sprint.name,
+        goal: sprint.goal ?? "",
+        start_date: sprint.start_date,
+        end_date: sprint.end_date,
+        planned_capacity: sprint.planned_capacity,
+      });
+    }
+  }, [open, sprint, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!sprint) return;
+    try {
+      const input: UpdateSprintInput = {
+        name: values.name.trim(),
+        goal: values.goal ? values.goal.trim() : null,
+        start_date: values.start_date,
+        end_date: values.end_date,
+        planned_capacity: values.planned_capacity,
+      };
+      await onSubmit(sprint.id, input);
+      toast({ title: "Sprint updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update sprint",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && sprint !== null}
+      onClose={onClose}
+      title={`Edit ${sprint?.name ?? "sprint"}`}
+      description={sprint ? `Status: ${sprint.status}` : undefined}
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="edit-name">Name</Label>
+          <Input
+            id="edit-name"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-goal">Goal</Label>
+          <textarea
+            id="edit-goal"
+            rows={3}
+            {...register("goal")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {errors.goal && (
+            <p className="text-xs text-destructive">{errors.goal.message}</p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-start">Start date</Label>
+            <Input
+              id="edit-start"
+              type="date"
+              {...register("start_date")}
+              aria-invalid={Boolean(errors.start_date)}
+            />
+            {errors.start_date && (
+              <p className="text-xs text-destructive">
+                {errors.start_date.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-end">End date</Label>
+            <Input
+              id="edit-end"
+              type="date"
+              {...register("end_date")}
+              aria-invalid={Boolean(errors.end_date)}
+            />
+            {errors.end_date && (
+              <p className="text-xs text-destructive">
+                {errors.end_date.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-capacity">Planned capacity (points)</Label>
+          <Input
+            id="edit-capacity"
+            type="number"
+            min={0}
+            step={1}
+            {...register("planned_capacity")}
+            aria-invalid={Boolean(errors.planned_capacity)}
+          />
+          {errors.planned_capacity && (
+            <p className="text-xs text-destructive">
+              {errors.planned_capacity.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/CompleteSprintDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  completeSprintSchema,
+  type CompleteSprintFormValues,
+} from "../sprintSchemas";
+import type { CompleteSprintInput, Sprint } from "../types";
+import { Modal } from "./Modal";
+
+interface CompleteSprintDialogProps {
+  readonly open: boolean;
+  readonly sprint: Sprint | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: CompleteSprintInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function CompleteSprintDialog({
+  open,
+  sprint,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: CompleteSprintDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CompleteSprintFormValues>({
+    resolver: zodResolver(completeSprintSchema),
+    defaultValues: { completed_points: 0 },
+  });
+
+  useEffect(() => {
+    if (open && sprint) {
+      reset({ completed_points: sprint.planned_capacity });
+    }
+  }, [open, sprint, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!sprint) return;
+    try {
+      await onSubmit(sprint.id, {
+        completed_points: values.completed_points,
+      });
+      toast({ title: "Sprint completed", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not complete sprint",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && sprint !== null}
+      onClose={onClose}
+      title={`Complete ${sprint?.name ?? "sprint"}`}
+      description="Record the final velocity for this sprint."
+      maxWidthClassName="max-w-md"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="completed-points">Completed points</Label>
+          <Input
+            id="completed-points"
+            type="number"
+            min={0}
+            step={1}
+            {...register("completed_points")}
+            aria-invalid={Boolean(errors.completed_points)}
+          />
+          {sprint && (
+            <p className="text-xs text-muted-foreground">
+              Planned capacity: {sprint.planned_capacity}
+            </p>
+          )}
+          {errors.completed_points && (
+            <p className="text-xs text-destructive">
+              {errors.completed_points.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Completing…
+              </>
+            ) : (
+              "Complete sprint"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/DeleteSprintDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { Sprint } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteSprintDialogProps {
+  readonly open: boolean;
+  readonly sprint: Sprint | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteSprintDialog({
+  open,
+  sprint,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteSprintDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!sprint) return;
+    try {
+      await onConfirm(sprint.id);
+      toast({ title: "Sprint deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete sprint",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && sprint !== null}
+      onClose={onClose}
+      title="Delete sprint"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {sprint ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{sprint.name}</span>.
+                </>
+              ) : (
+                "Sprint details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !sprint}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete sprint"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/SprintsErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface SprintsErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function SprintsErrorState({
+  message,
+  onRetry,
+}: SprintsErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">Failed to load sprints</h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/sprints/components/SprintsLoadingState.tsx
+
+```tsx
+export function SprintsLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-24 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/sprints/index.ts
+
+```ts
+export { sprintsApi } from "./sprintsApi";
+export { useSprints } from "./useSprints";
+export { useSprintProjects } from "./useSprintProjects";
+export type {
+  CompleteSprintInput,
+  CreateSprintInput,
+  PaginatedSprintProjects,
+  PaginatedSprints,
+  Sprint,
+  SprintListParams,
+  SprintProjectOption,
+  SprintStatus,
+  UpdateSprintInput,
+} from "./types";
+export { CompleteSprintDialog } from "./components/CompleteSprintDialog";
+export { CreateSprintDialog } from "./components/CreateSprintDialog";
+export { DeleteSprintDialog } from "./components/DeleteSprintDialog";
+export { EditSprintDialog } from "./components/EditSprintDialog";
+export { Pagination } from "./components/Pagination";
+export { SprintFilters } from "./components/SprintFilters";
+export { SprintStatusBadge } from "./components/SprintStatusBadge";
+export { SprintsErrorState } from "./components/SprintsErrorState";
+export { SprintsLoadingState } from "./components/SprintsLoadingState";
+export { SprintsTable } from "./components/SprintsTable";
+```
+
+### frontend/src/pages/sprints/SprintsPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  CompleteSprintDialog,
+  CreateSprintDialog,
+  DeleteSprintDialog,
+  EditSprintDialog,
+  Pagination,
+  SprintFilters,
+  SprintsErrorState,
+  SprintsLoadingState,
+  SprintsTable,
+  useSprintProjects,
+  useSprints,
+  type Sprint,
+} from "@/features/sprints";
+import { useToast } from "@/providers/ToastProvider";
+
+const PAGE_SIZE = 20;
+
+export default function SprintsPage() {
+  const {
+    projects,
+    isLoading: projectsLoading,
+    error: projectsError,
+  } = useSprintProjects();
+
+  const {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    search,
+    projectId,
+    setSearch,
+    setProjectId,
+    setPage,
+    refresh,
+    createSprint,
+    updateSprint,
+    deleteSprint,
+    startSprint,
+    completeSprint,
+  } = useSprints({ limit: PAGE_SIZE });
+
+  const { toast } = useToast();
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<Sprint | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Sprint | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<Sprint | null>(null);
+
+  const handleStart = async (sprint: Sprint) => {
+    try {
+      await startSprint(sprint.id);
+      toast({ title: `${sprint.name} started`, variant: "success" });
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not start sprint",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  const hasProjects = projects.length > 0;
+  const hasResults = filtered.length > 0;
+  const totalCount = data?.total ?? 0;
+  const canCreate = hasProjects;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Sprints</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Plan, run, and close sprints tied to your projects.
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          disabled={!canCreate || projectsLoading}
+        >
+          <Plus className="h-4 w-4" />
+          New sprint
+        </Button>
+      </header>
+
+      <SprintFilters
+        projects={projects}
+        isLoadingProjects={projectsLoading}
+        projectId={projectId}
+        onProjectChange={setProjectId}
+        search={search}
+        onSearchChange={setSearch}
+      />
+
+      {projectsError ? (
+        <SprintsErrorState
+          message={projectsError.message}
+          onRetry={() => window.location.reload()}
+        />
+      ) : !projectsLoading && !hasProjects ? (
+        <EmptyState
+          title="No projects available"
+          description="Create a project first to start planning sprints."
+        />
+      ) : !projectId ? (
+        <EmptyState
+          title="Select a project"
+          description="Pick a project above to view or create its sprints."
+        />
+      ) : isLoading && !data ? (
+        <SprintsLoadingState />
+      ) : error ? (
+        <SprintsErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            search
+              ? "No sprints match your search"
+              : "No sprints in this project yet"
+          }
+          description={
+            search
+              ? "Try a different name, goal, or status — or clear the search."
+              : "Create the first sprint to start tracking delivery."
+          }
+          action={
+            search ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSearch("")}
+              >
+                Clear search
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New sprint
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <SprintsTable
+            sprints={filtered}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+            onStart={(sprint) => void handleStart(sprint)}
+            onComplete={setCompleteTarget}
+          />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateSprintDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createSprint(input);
+        }}
+        isSubmitting={isMutating}
+        projects={projects}
+        projectsLoading={projectsLoading}
+        defaultProjectId={projectId}
+      />
+
+      <EditSprintDialog
+        open={editTarget !== null}
+        sprint={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateSprint(id, input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <CompleteSprintDialog
+        open={completeTarget !== null}
+        sprint={completeTarget}
+        onClose={() => setCompleteTarget(null)}
+        onSubmit={async (id, input) => {
+          await completeSprint(id, input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <DeleteSprintDialog
+        open={deleteTarget !== null}
+        sprint={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteSprint(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `SprintsPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const SprintsPage = lazy(() => import("@/pages/sprints/SprintsPage"));
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.SPRINTS}
+  element={<ModulePlaceholder title="Sprints" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.SPRINTS} element={<SprintsPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.

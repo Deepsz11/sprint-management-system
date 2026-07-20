@@ -13,6 +13,7 @@ const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
 const ModulePlaceholder = lazy(() => import("@/pages/ModulePlaceholder"));
 const ProjectsPage = lazy(() => import("@/pages/projects/ProjectsPage"));
+const SprintsPage = lazy(() => import("@/pages/sprints/SprintsPage"));
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -53,10 +54,7 @@ export function AppRouter() {
               element={<ModulePlaceholder title="Users" />}
             />
             <Route path={ROUTES.PROJECTS} element={<ProjectsPage />} />
-            <Route
-              path={ROUTES.SPRINTS}
-              element={<ModulePlaceholder title="Sprints" />}
-            />
+            <Route path={ROUTES.SPRINTS} element={<SprintsPage />} />
             <Route
               path={ROUTES.WORK_ITEMS}
               element={<ModulePlaceholder title="Work Items" />}
