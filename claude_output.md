@@ -33419,3 +33419,3853 @@ with:
 ```
 
 No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/teams/types.ts
+
+```ts
+export interface Team {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly description: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface TeamOrganizationOption {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly is_active: boolean;
+}
+
+export interface TeamLeadOption {
+  readonly id: string;
+  readonly email: string;
+  readonly full_name: string;
+  readonly organization_id: string | null;
+  readonly role: string;
+  readonly status: string;
+}
+
+export interface PaginatedTeams {
+  readonly items: Team[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedTeamOrganizations {
+  readonly items: TeamOrganizationOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedTeamLeads {
+  readonly items: TeamLeadOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CreateTeamInput {
+  readonly name: string;
+  readonly slug: string;
+  readonly description?: string | null;
+}
+
+export interface UpdateTeamInput {
+  readonly name?: string;
+  readonly description?: string | null;
+}
+
+export interface TeamListParams {
+  readonly limit: number;
+  readonly offset: number;
+}
+```
+
+### frontend/src/features/teams/teamsApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  CreateTeamInput,
+  PaginatedTeamLeads,
+  PaginatedTeamOrganizations,
+  PaginatedTeams,
+  Team,
+  TeamListParams,
+  UpdateTeamInput,
+} from "./types";
+
+export const teamsApi = {
+  async list(params: TeamListParams): Promise<PaginatedTeams> {
+    const response = await apiClient.get<PaginatedTeams>(
+      API_ENDPOINTS.TEAMS,
+      {
+        params: {
+          limit: params.limit,
+          offset: params.offset,
+        },
+      },
+    );
+    return response.data;
+  },
+
+  async get(id: string): Promise<Team> {
+    const response = await apiClient.get<Team>(
+      `${API_ENDPOINTS.TEAMS}/${id}`,
+    );
+    return response.data;
+  },
+
+  async create(input: CreateTeamInput): Promise<Team> {
+    const response = await apiClient.post<Team>(
+      API_ENDPOINTS.TEAMS,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(id: string, input: UpdateTeamInput): Promise<Team> {
+    const response = await apiClient.patch<Team>(
+      `${API_ENDPOINTS.TEAMS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.TEAMS}/${id}`);
+  },
+
+  async listOrganizations(): Promise<PaginatedTeamOrganizations> {
+    const response = await apiClient.get<PaginatedTeamOrganizations>(
+      API_ENDPOINTS.ORGANIZATIONS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+
+  async listLeads(): Promise<PaginatedTeamLeads> {
+    const response = await apiClient.get<PaginatedTeamLeads>(
+      API_ENDPOINTS.USERS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/teams/teamSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const optionalDescription = z
+  .string()
+  .trim()
+  .max(2000, "Description must be 2000 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+const optionalLead = z.string().uuid().optional().or(z.literal(""));
+
+export const createTeamSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(200, "Name must be 200 characters or fewer"),
+  slug: z
+    .string()
+    .trim()
+    .min(2, "Slug must be between 2 and 64 characters")
+    .max(64, "Slug must be between 2 and 64 characters")
+    .regex(slugRegex, "Use lowercase letters, digits, and hyphens only"),
+  description: optionalDescription,
+  team_lead_id: optionalLead,
+});
+
+export type CreateTeamFormValues = z.infer<typeof createTeamSchema>;
+
+export const editTeamSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(200, "Name must be 200 characters or fewer"),
+  description: optionalDescription,
+  team_lead_id: optionalLead,
+  is_active: z.boolean(),
+});
+
+export type EditTeamFormValues = z.infer<typeof editTeamSchema>;
+
+export function emptyToNull(value: string | undefined | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+export function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+```
+
+### frontend/src/features/teams/useTeams.ts
+
+```ts
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { teamsApi } from "./teamsApi";
+import type {
+  CreateTeamInput,
+  PaginatedTeams,
+  Team,
+  TeamListParams,
+  UpdateTeamInput,
+} from "./types";
+
+interface UseTeamsOptions {
+  readonly limit: number;
+}
+
+export interface TeamFilters {
+  readonly search: string;
+  readonly organizationId: string | null;
+  readonly status: "all" | "active" | "inactive";
+}
+
+interface UseTeamsResult {
+  readonly data: PaginatedTeams | null;
+  readonly items: Team[];
+  readonly filtered: Team[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly filters: TeamFilters;
+  readonly setSearch: (value: string) => void;
+  readonly setOrganizationId: (value: string | null) => void;
+  readonly setStatus: (value: TeamFilters["status"]) => void;
+  readonly setPage: (page: number) => void;
+  readonly resetFilters: () => void;
+  readonly refresh: () => Promise<void>;
+  readonly createTeam: (input: CreateTeamInput) => Promise<Team>;
+  readonly updateTeam: (id: string, input: UpdateTeamInput) => Promise<Team>;
+  readonly deleteTeam: (id: string) => Promise<void>;
+}
+
+const INITIAL_FILTERS: TeamFilters = {
+  search: "",
+  organizationId: null,
+  status: "all",
+};
+
+export function useTeams(
+  options: UseTeamsOptions = { limit: 20 },
+): UseTeamsResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedTeams | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [filters, setFilters] = useState<TeamFilters>(INITIAL_FILTERS);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: TeamListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+        };
+        const result = await teamsApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page]);
+
+  const setSearch = useCallback((value: string) => {
+    setFilters((current) => ({ ...current, search: value }));
+  }, []);
+
+  const setOrganizationId = useCallback((value: string | null) => {
+    setFilters((current) => ({ ...current, organizationId: value }));
+  }, []);
+
+  const setStatus = useCallback((value: TeamFilters["status"]) => {
+    setFilters((current) => ({ ...current, status: value }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page);
+  }, [load, page]);
+
+  const createTeam = useCallback(
+    async (input: CreateTeamInput) => {
+      setIsMutating(true);
+      try {
+        const created = await teamsApi.create(input);
+        setPage(1);
+        await load(1);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load],
+  );
+
+  const updateTeam = useCallback(
+    async (id: string, input: UpdateTeamInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await teamsApi.update(id, input);
+        await load(page);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page],
+  );
+
+  const deleteTeam = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await teamsApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page],
+  );
+
+  const items = data?.items ?? [];
+
+  const filtered = useMemo(() => {
+    const term = filters.search.trim().toLowerCase();
+    return items.filter((team) => {
+      if (
+        filters.organizationId &&
+        team.organization_id !== filters.organizationId
+      ) {
+        return false;
+      }
+      if (term.length === 0) return true;
+      return (
+        team.name.toLowerCase().includes(term) ||
+        team.slug.toLowerCase().includes(term) ||
+        (team.description ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [items, filters]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    items,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setSearch,
+    setOrganizationId,
+    setStatus,
+    setPage,
+    resetFilters,
+    refresh,
+    createTeam,
+    updateTeam,
+    deleteTeam,
+  };
+}
+```
+
+### frontend/src/features/teams/useOrganizationOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { teamsApi } from "./teamsApi";
+import type { TeamOrganizationOption } from "./types";
+
+interface UseOrganizationOptionsResult {
+  readonly organizations: TeamOrganizationOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useOrganizationOptions(): UseOrganizationOptionsResult {
+  const [organizations, setOrganizations] = useState<TeamOrganizationOption[]>(
+    [],
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await teamsApi.listOrganizations();
+        if (!cancelled) setOrganizations(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { organizations, isLoading, error };
+}
+```
+
+### frontend/src/features/teams/useTeamLeadOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { teamsApi } from "./teamsApi";
+import type { TeamLeadOption } from "./types";
+
+interface UseTeamLeadOptionsResult {
+  readonly leads: TeamLeadOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useTeamLeadOptions(): UseTeamLeadOptionsResult {
+  const [leads, setLeads] = useState<TeamLeadOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await teamsApi.listLeads();
+        if (!cancelled) setLeads(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { leads, isLoading, error };
+}
+```
+
+### frontend/src/features/teams/components/TeamStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+interface TeamStatusBadgeProps {
+  readonly isActive: boolean;
+}
+
+export function TeamStatusBadge({ isActive }: TeamStatusBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        isActive
+          ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          : "border border-border bg-muted text-muted-foreground",
+      )}
+    >
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
+```
+
+### frontend/src/features/teams/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/teams/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/teams/components/TeamFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+
+import type { TeamOrganizationOption } from "../types";
+import type { TeamFilters as TeamFiltersState } from "../useTeams";
+
+interface TeamFiltersProps {
+  readonly organizations: TeamOrganizationOption[];
+  readonly isLoadingOrganizations: boolean;
+  readonly search: string;
+  readonly organizationId: string | null;
+  readonly status: TeamFiltersState["status"];
+  readonly onSearchChange: (value: string) => void;
+  readonly onOrganizationChange: (value: string | null) => void;
+  readonly onStatusChange: (value: TeamFiltersState["status"]) => void;
+  readonly onReset: () => void;
+}
+
+export function TeamFilters({
+  organizations,
+  isLoadingOrganizations,
+  search,
+  organizationId,
+  status,
+  onSearchChange,
+  onOrganizationChange,
+  onStatusChange,
+  onReset,
+}: TeamFiltersProps) {
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="team-search">Search</Label>
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="team-search"
+              type="search"
+              placeholder="Name, slug, or description…"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              className="pl-9"
+              aria-label="Search teams"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-org">Organization</Label>
+          <select
+            id="team-org"
+            value={organizationId ?? ""}
+            onChange={(event) =>
+              onOrganizationChange(
+                event.target.value ? event.target.value : null,
+              )
+            }
+            disabled={isLoadingOrganizations}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingOrganizations ? "Loading…" : "All organizations"}
+            </option>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-status">Status</Label>
+          <select
+            id="team-status"
+            value={status}
+            onChange={(event) =>
+              onStatusChange(event.target.value as TeamFiltersState["status"])
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="button" variant="outline" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/teams/components/TeamsTable.tsx
+
+```tsx
+import { Pencil, Trash2, Users2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type { Team, TeamLeadOption, TeamOrganizationOption } from "../types";
+import { TeamStatusBadge } from "./TeamStatusBadge";
+
+interface TeamsTableProps {
+  readonly teams: Team[];
+  readonly organizations: TeamOrganizationOption[];
+  readonly leads: TeamLeadOption[];
+  readonly isMutating: boolean;
+  readonly onEdit: (team: Team) => void;
+  readonly onDelete: (team: Team) => void;
+  readonly leadByTeamId?: Record<string, string | null>;
+  readonly memberCountByTeamId?: Record<string, number>;
+  readonly activeByTeamId?: Record<string, boolean>;
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+export function TeamsTable({
+  teams,
+  organizations,
+  leads,
+  isMutating,
+  onEdit,
+  onDelete,
+  leadByTeamId,
+  memberCountByTeamId,
+  activeByTeamId,
+}: TeamsTableProps) {
+  const organizationMap = new Map(
+    organizations.map((organization) => [organization.id, organization.name]),
+  );
+  const leadMap = new Map(leads.map((lead) => [lead.id, lead.full_name]));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Team
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Organization
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Team lead
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Members
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Created
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {teams.map((team) => {
+              const leadId = leadByTeamId?.[team.id] ?? null;
+              const memberCount = memberCountByTeamId?.[team.id] ?? 0;
+              const isActive = activeByTeamId?.[team.id] ?? true;
+
+              return (
+                <tr
+                  key={team.id}
+                  className={cn(
+                    "transition-colors hover:bg-muted/30",
+                    !isActive && "opacity-70",
+                  )}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Users2 className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">
+                          {team.name}
+                        </span>
+                        {team.description && (
+                          <span className="line-clamp-1 text-xs text-muted-foreground">
+                            {team.description}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {organizationMap.get(team.organization_id) ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {leadId ? leadMap.get(leadId) ?? "—" : "Unassigned"}
+                  </td>
+                  <td className="px-4 py-3 text-foreground">{memberCount}</td>
+                  <td className="px-4 py-3">
+                    <TeamStatusBadge isActive={isActive} />
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatDate(team.created_at)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${team.name}`}
+                        onClick={() => onEdit(team)}
+                        disabled={isMutating}
+                        title="Edit team"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${team.name}`}
+                        onClick={() => onDelete(team)}
+                        disabled={isMutating}
+                        title="Delete team"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/teams/components/CreateTeamDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  createTeamSchema,
+  emptyToNull,
+  slugify,
+  type CreateTeamFormValues,
+} from "../teamSchemas";
+import type { CreateTeamInput, TeamLeadOption } from "../types";
+import { Modal } from "./Modal";
+
+interface CreateTeamDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateTeamInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly leads: TeamLeadOption[];
+  readonly leadsLoading: boolean;
+  readonly onLeadAssign?: (teamId: string, leadId: string | null) => void;
+  readonly defaultLeadId?: string | null;
+}
+
+export function CreateTeamDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  leads,
+  leadsLoading,
+  onLeadAssign,
+  defaultLeadId,
+}: CreateTeamDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateTeamFormValues>({
+    resolver: zodResolver(createTeamSchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      description: "",
+      team_lead_id: defaultLeadId ?? "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      name: "",
+      slug: "",
+      description: "",
+      team_lead_id: defaultLeadId ?? "",
+    });
+  }, [open, defaultLeadId, reset]);
+
+  const nameValue = watch("name");
+  const slugValue = watch("slug");
+
+  useEffect(() => {
+    if (!nameValue) return;
+    if (!slugValue) {
+      setValue("slug", slugify(nameValue), { shouldValidate: false });
+    }
+  }, [nameValue, slugValue, setValue]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: CreateTeamInput = {
+        name: values.name.trim(),
+        slug: values.slug.trim().toLowerCase(),
+        description: emptyToNull(values.description),
+      };
+      const created = await onSubmitAndReturn(input);
+      if (created && values.team_lead_id) {
+        onLeadAssign?.(created, values.team_lead_id);
+      }
+      toast({ title: "Team created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create team",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  async function onSubmitAndReturn(input: CreateTeamInput): Promise<string | null> {
+    await onSubmit(input);
+    return null;
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create team"
+      description="Add a new engineering or product team to your organization."
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="team-create-name">Name</Label>
+          <Input
+            id="team-create-name"
+            placeholder="e.g. Growth Engineering"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-create-slug">Slug</Label>
+          <Input
+            id="team-create-slug"
+            placeholder="growth-engineering"
+            {...register("slug")}
+            aria-invalid={Boolean(errors.slug)}
+          />
+          {errors.slug && (
+            <p className="text-xs text-destructive">{errors.slug.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-create-description">Description</Label>
+          <textarea
+            id="team-create-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Optional summary of what this team owns"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-create-lead">Team lead</Label>
+          <select
+            id="team-create-lead"
+            {...register("team_lead_id")}
+            disabled={leadsLoading}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {leadsLoading ? "Loading…" : "Unassigned"}
+            </option>
+            {leads.map((lead) => (
+              <option key={lead.id} value={lead.id}>
+                {lead.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create team"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/teams/components/EditTeamDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  editTeamSchema,
+  emptyToNull,
+  type EditTeamFormValues,
+} from "../teamSchemas";
+import type { Team, TeamLeadOption, UpdateTeamInput } from "../types";
+import { Modal } from "./Modal";
+
+interface EditTeamDialogProps {
+  readonly open: boolean;
+  readonly team: Team | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: UpdateTeamInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly leads: TeamLeadOption[];
+  readonly leadsLoading: boolean;
+  readonly currentLeadId?: string | null;
+  readonly currentIsActive?: boolean;
+  readonly onLeadChange?: (teamId: string, leadId: string | null) => void;
+  readonly onActiveChange?: (teamId: string, isActive: boolean) => void;
+}
+
+export function EditTeamDialog({
+  open,
+  team,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  leads,
+  leadsLoading,
+  currentLeadId,
+  currentIsActive = true,
+  onLeadChange,
+  onActiveChange,
+}: EditTeamDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditTeamFormValues>({
+    resolver: zodResolver(editTeamSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      team_lead_id: "",
+      is_active: true,
+    },
+  });
+
+  useEffect(() => {
+    if (open && team) {
+      reset({
+        name: team.name,
+        description: team.description ?? "",
+        team_lead_id: currentLeadId ?? "",
+        is_active: currentIsActive,
+      });
+    }
+  }, [open, team, currentLeadId, currentIsActive, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!team) return;
+    try {
+      const input: UpdateTeamInput = {
+        name: values.name.trim(),
+        description: emptyToNull(values.description),
+      };
+      await onSubmit(team.id, input);
+      onLeadChange?.(team.id, values.team_lead_id ? values.team_lead_id : null);
+      onActiveChange?.(team.id, values.is_active);
+      toast({ title: "Team updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update team",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && team !== null}
+      onClose={onClose}
+      title={`Edit ${team?.name ?? "team"}`}
+      description={team ? `Slug: ${team.slug}` : undefined}
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="team-edit-name">Name</Label>
+          <Input
+            id="team-edit-name"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-edit-description">Description</Label>
+          <textarea
+            id="team-edit-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="team-edit-lead">Team lead</Label>
+          <select
+            id="team-edit-lead"
+            {...register("team_lead_id")}
+            disabled={leadsLoading}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {leadsLoading ? "Loading…" : "Unassigned"}
+            </option>
+            {leads.map((lead) => (
+              <option key={lead.id} value={lead.id}>
+                {lead.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring"
+            {...register("is_active")}
+          />
+          Active
+        </label>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/teams/components/DeleteTeamDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { Team } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteTeamDialogProps {
+  readonly open: boolean;
+  readonly team: Team | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteTeamDialog({
+  open,
+  team,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteTeamDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!team) return;
+    try {
+      await onConfirm(team.id);
+      toast({ title: "Team deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete team",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && team !== null}
+      onClose={onClose}
+      title="Delete team"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {team ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{team.name}</span>. Any
+                  memberships and future project assignments will be affected.
+                </>
+              ) : (
+                "Team details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !team}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete team"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/teams/components/TeamsLoadingState.tsx
+
+```tsx
+export function TeamsLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-9 w-9 animate-pulse rounded-md bg-muted" />
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-12 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/teams/components/TeamsErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface TeamsErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function TeamsErrorState({ message, onRetry }: TeamsErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">Failed to load teams</h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/teams/index.ts
+
+```ts
+export { teamsApi } from "./teamsApi";
+export { useTeams } from "./useTeams";
+export { useOrganizationOptions } from "./useOrganizationOptions";
+export { useTeamLeadOptions } from "./useTeamLeadOptions";
+export type {
+  CreateTeamInput,
+  PaginatedTeams,
+  Team,
+  TeamListParams,
+  TeamLeadOption,
+  TeamOrganizationOption,
+  UpdateTeamInput,
+} from "./types";
+export { CreateTeamDialog } from "./components/CreateTeamDialog";
+export { DeleteTeamDialog } from "./components/DeleteTeamDialog";
+export { EditTeamDialog } from "./components/EditTeamDialog";
+export { Modal as TeamModal } from "./components/Modal";
+export { Pagination as TeamsPagination } from "./components/Pagination";
+export { TeamFilters } from "./components/TeamFilters";
+export { TeamStatusBadge } from "./components/TeamStatusBadge";
+export { TeamsErrorState } from "./components/TeamsErrorState";
+export { TeamsLoadingState } from "./components/TeamsLoadingState";
+export { TeamsTable } from "./components/TeamsTable";
+```
+
+### frontend/src/pages/teams/TeamsPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  CreateTeamDialog,
+  DeleteTeamDialog,
+  EditTeamDialog,
+  TeamFilters,
+  TeamsErrorState,
+  TeamsLoadingState,
+  TeamsPagination,
+  TeamsTable,
+  useOrganizationOptions,
+  useTeamLeadOptions,
+  useTeams,
+  type Team,
+} from "@/features/teams";
+
+const PAGE_SIZE = 20;
+
+export default function TeamsPage() {
+  const {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setSearch,
+    setOrganizationId,
+    setStatus,
+    setPage,
+    resetFilters,
+    refresh,
+    createTeam,
+    updateTeam,
+    deleteTeam,
+  } = useTeams({ limit: PAGE_SIZE });
+
+  const {
+    organizations,
+    isLoading: orgsLoading,
+  } = useOrganizationOptions();
+  const { leads, isLoading: leadsLoading } = useTeamLeadOptions();
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<Team | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Team | null>(null);
+  const [teamLeadMap, setTeamLeadMap] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [teamActiveMap, setTeamActiveMap] = useState<Record<string, boolean>>(
+    {},
+  );
+
+  const totalCount = data?.total ?? 0;
+  const filtersActive =
+    filters.search.trim().length > 0 ||
+    filters.organizationId !== null ||
+    filters.status !== "all";
+
+  const isTeamActive = (team: Team) =>
+    teamActiveMap[team.id] === undefined ? true : teamActiveMap[team.id];
+
+  const visible = filtered.filter((team) => {
+    if (filters.status === "all") return true;
+    if (filters.status === "active") return isTeamActive(team);
+    return !isTeamActive(team);
+  });
+
+  const hasResults = visible.length > 0;
+
+  const activeMap = filtered.reduce<Record<string, boolean>>(
+    (acc, team) => {
+      acc[team.id] = isTeamActive(team);
+      return acc;
+    },
+    {},
+  );
+
+  const handleLeadAssign = (teamId: string, leadId: string | null) => {
+    setTeamLeadMap((current) => ({ ...current, [teamId]: leadId }));
+  };
+
+  const handleActiveChange = (teamId: string, isActive: boolean) => {
+    setTeamActiveMap((current) => ({ ...current, [teamId]: isActive }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Teams</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Organize people into teams and connect them to projects and outcomes.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New team
+        </Button>
+      </header>
+
+      <TeamFilters
+        organizations={organizations}
+        isLoadingOrganizations={orgsLoading}
+        search={filters.search}
+        organizationId={filters.organizationId}
+        status={filters.status}
+        onSearchChange={setSearch}
+        onOrganizationChange={setOrganizationId}
+        onStatusChange={setStatus}
+        onReset={resetFilters}
+      />
+
+      {isLoading && !data ? (
+        <TeamsLoadingState />
+      ) : error ? (
+        <TeamsErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            filtersActive ? "No teams match your filters" : "No teams yet"
+          }
+          description={
+            filtersActive
+              ? "Try broadening the search or clearing filters."
+              : "Create your first team to start organizing delivery."
+          }
+          action={
+            <div className="flex items-center gap-2">
+              {filtersActive && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetFilters}
+                >
+                  Reset filters
+                </Button>
+              )}
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New team
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <TeamsTable
+            teams={visible}
+            organizations={organizations}
+            leads={leads}
+            isMutating={isMutating}
+            leadByTeamId={teamLeadMap}
+            activeByTeamId={activeMap}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+          />
+          <TeamsPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateTeamDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createTeam(input);
+        }}
+        isSubmitting={isMutating}
+        leads={leads}
+        leadsLoading={leadsLoading}
+        onLeadAssign={handleLeadAssign}
+      />
+
+      <EditTeamDialog
+        open={editTarget !== null}
+        team={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateTeam(id, input);
+        }}
+        isSubmitting={isMutating}
+        leads={leads}
+        leadsLoading={leadsLoading}
+        currentLeadId={editTarget ? teamLeadMap[editTarget.id] ?? null : null}
+        currentIsActive={editTarget ? isTeamActive(editTarget) : true}
+        onLeadChange={handleLeadAssign}
+        onActiveChange={handleActiveChange}
+      />
+
+      <DeleteTeamDialog
+        open={deleteTarget !== null}
+        team={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteTeam(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `TeamsPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const TeamsPage = lazy(() => import("@/pages/teams/TeamsPage"));
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.TEAMS}
+  element={<ModulePlaceholder title="Teams" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.TEAMS} element={<TeamsPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/users/types.ts
+
+```ts
+export type UserRole =
+  | "super_admin"
+  | "org_admin"
+  | "executive"
+  | "product_manager"
+  | "engineering_manager"
+  | "engineer"
+  | "viewer";
+
+export type UserStatus =
+  | "active"
+  | "invited"
+  | "suspended"
+  | "deactivated";
+
+export interface User {
+  readonly id: string;
+  readonly email: string;
+  readonly full_name: string;
+  readonly organization_id: string | null;
+  readonly role: UserRole;
+  readonly status: UserStatus;
+  readonly last_login_at: string | null;
+  readonly is_email_verified: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface UserOrganizationOption {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly is_active: boolean;
+}
+
+export interface UserTeamOption {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly name: string;
+  readonly slug: string;
+}
+
+export interface PaginatedUsers {
+  readonly items: User[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedUserOrganizations {
+  readonly items: UserOrganizationOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedUserTeams {
+  readonly items: UserTeamOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface InviteUserInput {
+  readonly email: string;
+  readonly password: string;
+  readonly full_name: string;
+  readonly role: UserRole;
+  readonly organization_id?: string | null;
+}
+
+export interface UpdateUserInput {
+  readonly full_name?: string;
+  readonly role?: UserRole;
+  readonly status?: UserStatus;
+}
+
+export interface UserListParams {
+  readonly limit: number;
+  readonly offset: number;
+  readonly role?: UserRole;
+  readonly search?: string;
+}
+```
+
+### frontend/src/features/users/usersApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  InviteUserInput,
+  PaginatedUserOrganizations,
+  PaginatedUserTeams,
+  PaginatedUsers,
+  UpdateUserInput,
+  User,
+  UserListParams,
+} from "./types";
+
+function buildParams(params: UserListParams): Record<string, unknown> {
+  const query: Record<string, unknown> = {
+    limit: params.limit,
+    offset: params.offset,
+  };
+  if (params.role) query.role = params.role;
+  if (params.search && params.search.trim().length > 0) {
+    query.search = params.search.trim();
+  }
+  return query;
+}
+
+export const usersApi = {
+  async list(params: UserListParams): Promise<PaginatedUsers> {
+    const response = await apiClient.get<PaginatedUsers>(
+      API_ENDPOINTS.USERS,
+      { params: buildParams(params) },
+    );
+    return response.data;
+  },
+
+  async get(id: string): Promise<User> {
+    const response = await apiClient.get<User>(
+      `${API_ENDPOINTS.USERS}/${id}`,
+    );
+    return response.data;
+  },
+
+  async invite(input: InviteUserInput): Promise<User> {
+    const response = await apiClient.post<User>(
+      `${API_ENDPOINTS.USERS}/invite`,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(id: string, input: UpdateUserInput): Promise<User> {
+    const response = await apiClient.patch<User>(
+      `${API_ENDPOINTS.USERS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async listOrganizations(): Promise<PaginatedUserOrganizations> {
+    const response = await apiClient.get<PaginatedUserOrganizations>(
+      API_ENDPOINTS.ORGANIZATIONS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+
+  async listTeams(): Promise<PaginatedUserTeams> {
+    const response = await apiClient.get<PaginatedUserTeams>(
+      API_ENDPOINTS.TEAMS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/users/userSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const ROLES = [
+  "super_admin",
+  "org_admin",
+  "executive",
+  "product_manager",
+  "engineering_manager",
+  "engineer",
+  "viewer",
+] as const;
+
+const STATUSES = ["active", "invited", "suspended", "deactivated"] as const;
+
+const optionalOrg = z.string().uuid().optional().or(z.literal(""));
+const optionalTeam = z.string().uuid().optional().or(z.literal(""));
+
+export const inviteUserSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .email("Enter a valid email address"),
+  full_name: z
+    .string()
+    .trim()
+    .min(1, "Full name is required")
+    .max(200, "Must be 200 characters or fewer"),
+  password: z
+    .string()
+    .min(8, "Must be at least 8 characters")
+    .max(128, "Must be 128 characters or fewer"),
+  role: z.enum(ROLES),
+  organization_id: optionalOrg,
+  team_id: optionalTeam,
+});
+
+export type InviteUserFormValues = z.infer<typeof inviteUserSchema>;
+
+export const editUserSchema = z.object({
+  full_name: z
+    .string()
+    .trim()
+    .min(1, "Full name is required")
+    .max(200, "Must be 200 characters or fewer"),
+  role: z.enum(ROLES),
+  status: z.enum(STATUSES),
+  team_id: optionalTeam,
+});
+
+export type EditUserFormValues = z.infer<typeof editUserSchema>;
+
+export const USER_ROLE_OPTIONS = ROLES;
+export const USER_STATUS_OPTIONS = STATUSES;
+```
+
+### frontend/src/features/users/useUsers.ts
+
+```ts
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { usersApi } from "./usersApi";
+import type {
+  InviteUserInput,
+  PaginatedUsers,
+  UpdateUserInput,
+  User,
+  UserListParams,
+  UserRole,
+  UserStatus,
+} from "./types";
+
+interface UseUsersOptions {
+  readonly limit: number;
+}
+
+export interface UserFilters {
+  readonly search: string;
+  readonly organizationId: string | null;
+  readonly teamId: string | null;
+  readonly role: UserRole | null;
+  readonly status: UserStatus | "all";
+}
+
+interface UseUsersResult {
+  readonly data: PaginatedUsers | null;
+  readonly items: User[];
+  readonly filtered: User[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly filters: UserFilters;
+  readonly setSearch: (value: string) => void;
+  readonly setOrganizationId: (value: string | null) => void;
+  readonly setTeamId: (value: string | null) => void;
+  readonly setRole: (value: UserRole | null) => void;
+  readonly setStatus: (value: UserFilters["status"]) => void;
+  readonly setPage: (page: number) => void;
+  readonly resetFilters: () => void;
+  readonly refresh: () => Promise<void>;
+  readonly inviteUser: (input: InviteUserInput) => Promise<User>;
+  readonly updateUser: (id: string, input: UpdateUserInput) => Promise<User>;
+  readonly deactivateUser: (id: string) => Promise<User>;
+}
+
+const INITIAL_FILTERS: UserFilters = {
+  search: "",
+  organizationId: null,
+  teamId: null,
+  role: null,
+  status: "all",
+};
+
+export function useUsers(
+  options: UseUsersOptions = { limit: 20 },
+): UseUsersResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedUsers | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [filters, setFilters] = useState<UserFilters>(INITIAL_FILTERS);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number, currentFilters: UserFilters) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: UserListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+          role: currentFilters.role ?? undefined,
+          search:
+            currentFilters.search.trim().length > 0
+              ? currentFilters.search
+              : undefined,
+        };
+        const result = await usersApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page, filters);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page, filters]);
+
+  const patch = useCallback((changes: Partial<UserFilters>) => {
+    setFilters((current) => ({ ...current, ...changes }));
+    setPage(1);
+  }, []);
+
+  const setSearch = useCallback(
+    (value: string) => patch({ search: value }),
+    [patch],
+  );
+  const setOrganizationId = useCallback(
+    (value: string | null) => patch({ organizationId: value, teamId: null }),
+    [patch],
+  );
+  const setTeamId = useCallback(
+    (value: string | null) => patch({ teamId: value }),
+    [patch],
+  );
+  const setRole = useCallback(
+    (value: UserRole | null) => patch({ role: value }),
+    [patch],
+  );
+  const setStatus = useCallback(
+    (value: UserFilters["status"]) => patch({ status: value }),
+    [patch],
+  );
+
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+    setPage(1);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page, filters);
+  }, [load, page, filters]);
+
+  const inviteUser = useCallback(
+    async (input: InviteUserInput) => {
+      setIsMutating(true);
+      try {
+        const created = await usersApi.invite(input);
+        setPage(1);
+        await load(1, filters);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, filters],
+  );
+
+  const updateUser = useCallback(
+    async (id: string, input: UpdateUserInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await usersApi.update(id, input);
+        await load(page, filters);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, filters],
+  );
+
+  const deactivateUser = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        const updated = await usersApi.update(id, { status: "deactivated" });
+        await load(page, filters);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, filters],
+  );
+
+  const items = data?.items ?? [];
+  const filtered = items.filter((user) => {
+    if (
+      filters.organizationId &&
+      user.organization_id !== filters.organizationId
+    ) {
+      return false;
+    }
+    if (filters.status !== "all" && user.status !== filters.status) {
+      return false;
+    }
+    return true;
+  });
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    items,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setSearch,
+    setOrganizationId,
+    setTeamId,
+    setRole,
+    setStatus,
+    setPage,
+    resetFilters,
+    refresh,
+    inviteUser,
+    updateUser,
+    deactivateUser,
+  };
+}
+```
+
+### frontend/src/features/users/useOrganizationOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { usersApi } from "./usersApi";
+import type { UserOrganizationOption } from "./types";
+
+interface UseOrganizationOptionsResult {
+  readonly organizations: UserOrganizationOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useOrganizationOptions(): UseOrganizationOptionsResult {
+  const [organizations, setOrganizations] = useState<UserOrganizationOption[]>(
+    [],
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await usersApi.listOrganizations();
+        if (!cancelled) setOrganizations(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { organizations, isLoading, error };
+}
+```
+
+### frontend/src/features/users/useTeamOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { usersApi } from "./usersApi";
+import type { UserTeamOption } from "./types";
+
+interface UseTeamOptionsResult {
+  readonly teams: UserTeamOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useTeamOptions(): UseTeamOptionsResult {
+  const [teams, setTeams] = useState<UserTeamOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await usersApi.listTeams();
+        if (!cancelled) setTeams(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { teams, isLoading, error };
+}
+```
+
+### frontend/src/features/users/useRoleOptions.ts
+
+```ts
+import type { UserRole } from "./types";
+import { USER_ROLE_OPTIONS } from "./userSchemas";
+
+export interface RoleOption {
+  readonly value: UserRole;
+  readonly label: string;
+}
+
+const LABELS: Record<UserRole, string> = {
+  super_admin: "Super Admin",
+  org_admin: "Org Admin",
+  executive: "Executive",
+  product_manager: "Product Manager",
+  engineering_manager: "Engineering Manager",
+  engineer: "Engineer",
+  viewer: "Viewer",
+};
+
+export function useRoleOptions(): RoleOption[] {
+  return USER_ROLE_OPTIONS.map((value) => ({
+    value,
+    label: LABELS[value],
+  }));
+}
+
+export const ROLE_LABELS = LABELS;
+```
+
+### frontend/src/features/users/components/UserStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+import type { UserStatus } from "../types";
+
+const STYLES: Record<UserStatus, string> = {
+  active:
+    "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  invited:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  suspended:
+    "border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  deactivated:
+    "border border-border bg-muted text-muted-foreground line-through",
+};
+
+const LABELS: Record<UserStatus, string> = {
+  active: "Active",
+  invited: "Invited",
+  suspended: "Suspended",
+  deactivated: "Disabled",
+};
+
+interface UserStatusBadgeProps {
+  readonly status: UserStatus;
+}
+
+export function UserStatusBadge({ status }: UserStatusBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STYLES[status],
+      )}
+    >
+      {LABELS[status]}
+    </span>
+  );
+}
+
+export { LABELS as USER_STATUS_LABELS };
+```
+
+### frontend/src/features/users/components/RoleBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+import type { UserRole } from "../types";
+import { ROLE_LABELS } from "../useRoleOptions";
+
+const STYLES: Record<UserRole, string> = {
+  super_admin:
+    "border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  org_admin:
+    "border border-primary/40 bg-primary/10 text-primary",
+  executive:
+    "border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  product_manager:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  engineering_manager:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  engineer:
+    "border border-slate-500/40 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  viewer: "border border-border bg-muted text-muted-foreground",
+};
+
+interface RoleBadgeProps {
+  readonly role: UserRole;
+}
+
+export function RoleBadge({ role }: RoleBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STYLES[role],
+      )}
+    >
+      {ROLE_LABELS[role]}
+    </span>
+  );
+}
+```
+
+### frontend/src/features/users/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/users/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/users/components/UserFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+
+import type {
+  UserOrganizationOption,
+  UserRole,
+  UserStatus,
+  UserTeamOption,
+} from "../types";
+import type { UserFilters as UserFiltersState } from "../useUsers";
+import { ROLE_LABELS, useRoleOptions } from "../useRoleOptions";
+import { USER_STATUS_OPTIONS } from "../userSchemas";
+import { USER_STATUS_LABELS } from "./UserStatusBadge";
+
+interface UserFiltersProps {
+  readonly organizations: UserOrganizationOption[];
+  readonly teams: UserTeamOption[];
+  readonly isLoadingOrganizations: boolean;
+  readonly isLoadingTeams: boolean;
+  readonly search: string;
+  readonly organizationId: string | null;
+  readonly teamId: string | null;
+  readonly role: UserRole | null;
+  readonly status: UserFiltersState["status"];
+  readonly onSearchChange: (value: string) => void;
+  readonly onOrganizationChange: (value: string | null) => void;
+  readonly onTeamChange: (value: string | null) => void;
+  readonly onRoleChange: (value: UserRole | null) => void;
+  readonly onStatusChange: (value: UserFiltersState["status"]) => void;
+  readonly onReset: () => void;
+}
+
+export function UserFilters({
+  organizations,
+  teams,
+  isLoadingOrganizations,
+  isLoadingTeams,
+  search,
+  organizationId,
+  teamId,
+  role,
+  status,
+  onSearchChange,
+  onOrganizationChange,
+  onTeamChange,
+  onRoleChange,
+  onStatusChange,
+  onReset,
+}: UserFiltersProps) {
+  const roleOptions = useRoleOptions();
+  const filteredTeams = organizationId
+    ? teams.filter((team) => team.organization_id === organizationId)
+    : teams;
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-2 md:col-span-2 xl:col-span-2">
+          <Label htmlFor="user-search">Search</Label>
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="user-search"
+              type="search"
+              placeholder="Name or email…"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              className="pl-9"
+              aria-label="Search users"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="user-org">Organization</Label>
+          <select
+            id="user-org"
+            value={organizationId ?? ""}
+            onChange={(event) =>
+              onOrganizationChange(
+                event.target.value ? event.target.value : null,
+              )
+            }
+            disabled={isLoadingOrganizations}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingOrganizations ? "Loading…" : "All organizations"}
+            </option>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="user-team">Team</Label>
+          <select
+            id="user-team"
+            value={teamId ?? ""}
+            onChange={(event) =>
+              onTeamChange(event.target.value ? event.target.value : null)
+            }
+            disabled={isLoadingTeams || filteredTeams.length === 0}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingTeams
+                ? "Loading…"
+                : filteredTeams.length === 0
+                ? "No teams available"
+                : "All teams"}
+            </option>
+            {filteredTeams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="user-role">Role</Label>
+          <select
+            id="user-role"
+            value={role ?? ""}
+            onChange={(event) =>
+              onRoleChange(
+                event.target.value ? (event.target.value as UserRole) : null,
+              )
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All roles</option>
+            {roleOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {ROLE_LABELS[option.value]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="user-status">Status</Label>
+          <select
+            id="user-status"
+            value={status}
+            onChange={(event) =>
+              onStatusChange(event.target.value as UserFiltersState["status"])
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">All</option>
+            {USER_STATUS_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {USER_STATUS_LABELS[value as UserStatus]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="button" variant="outline" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/users/components/UsersTable.tsx
+
+```tsx
+import { Pencil, UserMinus } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type {
+  User,
+  UserOrganizationOption,
+  UserTeamOption,
+} from "../types";
+import { RoleBadge } from "./RoleBadge";
+import { UserStatusBadge } from "./UserStatusBadge";
+
+interface UsersTableProps {
+  readonly users: User[];
+  readonly organizations: UserOrganizationOption[];
+  readonly teams: UserTeamOption[];
+  readonly isMutating: boolean;
+  readonly onEdit: (user: User) => void;
+  readonly onDeactivate: (user: User) => void;
+  readonly teamByUserId?: Record<string, string | null>;
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+export function UsersTable({
+  users,
+  organizations,
+  teams,
+  isMutating,
+  onEdit,
+  onDeactivate,
+  teamByUserId,
+}: UsersTableProps) {
+  const organizationMap = new Map(
+    organizations.map((organization) => [organization.id, organization.name]),
+  );
+  const teamMap = new Map(teams.map((team) => [team.id, team.name]));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                User
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Email
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Organization
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Team
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Role
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Last login
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {users.map((user) => {
+              const teamId = teamByUserId?.[user.id] ?? null;
+              const canDeactivate = user.status !== "deactivated";
+              return (
+                <tr
+                  key={user.id}
+                  className={cn(
+                    "transition-colors hover:bg-muted/30",
+                    user.status === "deactivated" && "opacity-70",
+                  )}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {initials(user.full_name)}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">
+                          {user.full_name}
+                        </span>
+                        {!user.is_email_verified && (
+                          <span className="text-xs text-muted-foreground">
+                            Email unverified
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {user.email}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {user.organization_id
+                      ? organizationMap.get(user.organization_id) ?? "—"
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {teamId ? teamMap.get(teamId) ?? "—" : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <RoleBadge role={user.role} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <UserStatusBadge status={user.status} />
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatDate(user.last_login_at)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${user.full_name}`}
+                        onClick={() => onEdit(user)}
+                        disabled={isMutating}
+                        title="Edit user"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Deactivate ${user.full_name}`}
+                        onClick={() => onDeactivate(user)}
+                        disabled={isMutating || !canDeactivate}
+                        title={
+                          canDeactivate
+                            ? "Deactivate user"
+                            : "User is already deactivated"
+                        }
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive disabled:text-muted-foreground"
+                      >
+                        <UserMinus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/users/components/InviteUserDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import type {
+  InviteUserInput,
+  UserOrganizationOption,
+  UserTeamOption,
+} from "../types";
+import {
+  inviteUserSchema,
+  type InviteUserFormValues,
+} from "../userSchemas";
+import { ROLE_LABELS, useRoleOptions } from "../useRoleOptions";
+import { Modal } from "./Modal";
+
+interface InviteUserDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: InviteUserInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly organizations: UserOrganizationOption[];
+  readonly teams: UserTeamOption[];
+  readonly orgsLoading: boolean;
+  readonly teamsLoading: boolean;
+  readonly defaultOrganizationId: string | null;
+  readonly onTeamAssign?: (userId: string, teamId: string | null) => void;
+}
+
+export function InviteUserDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  organizations,
+  teams,
+  orgsLoading,
+  teamsLoading,
+  defaultOrganizationId,
+  onTeamAssign,
+}: InviteUserDialogProps) {
+  const { toast } = useToast();
+  const roleOptions = useRoleOptions();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<InviteUserFormValues>({
+    resolver: zodResolver(inviteUserSchema),
+    defaultValues: {
+      email: "",
+      full_name: "",
+      password: "",
+      role: "viewer",
+      organization_id: defaultOrganizationId ?? "",
+      team_id: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      email: "",
+      full_name: "",
+      password: "",
+      role: "viewer",
+      organization_id: defaultOrganizationId ?? "",
+      team_id: "",
+    });
+  }, [open, defaultOrganizationId, reset]);
+
+  const watchedOrg = watch("organization_id");
+  const eligibleTeams = watchedOrg
+    ? teams.filter((team) => team.organization_id === watchedOrg)
+    : teams;
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: InviteUserInput = {
+        email: values.email.trim().toLowerCase(),
+        full_name: values.full_name.trim(),
+        password: values.password,
+        role: values.role,
+        organization_id: values.organization_id ? values.organization_id : null,
+      };
+      await onSubmit(input);
+      if (values.team_id) {
+        onTeamAssign?.(values.email.trim().toLowerCase(), values.team_id);
+      }
+      toast({ title: "Invitation sent", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not invite user",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Invite user"
+      description="Add a new member to an organization."
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="user-invite-name">Full name</Label>
+            <Input
+              id="user-invite-name"
+              placeholder="Jane Doe"
+              autoComplete="off"
+              {...register("full_name")}
+              aria-invalid={Boolean(errors.full_name)}
+            />
+            {errors.full_name && (
+              <p className="text-xs text-destructive">
+                {errors.full_name.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-invite-email">Email</Label>
+            <Input
+              id="user-invite-email"
+              type="email"
+              placeholder="jane@acme.com"
+              autoComplete="off"
+              {...register("email")}
+              aria-invalid={Boolean(errors.email)}
+            />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email.message}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="user-invite-password">Temporary password</Label>
+          <Input
+            id="user-invite-password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Minimum 8 characters"
+            {...register("password")}
+            aria-invalid={Boolean(errors.password)}
+          />
+          {errors.password && (
+            <p className="text-xs text-destructive">
+              {errors.password.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="user-invite-role">Role</Label>
+            <select
+              id="user-invite-role"
+              {...register("role")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {ROLE_LABELS[option.value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-invite-org">Organization</Label>
+            <select
+              id="user-invite-org"
+              {...register("organization_id")}
+              disabled={orgsLoading}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {orgsLoading ? "Loading…" : "No organization"}
+              </option>
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-invite-team">Team</Label>
+            <select
+              id="user-invite-team"
+              {...register("team_id")}
+              disabled={teamsLoading || eligibleTeams.length === 0}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {teamsLoading
+                  ? "Loading…"
+                  : eligibleTeams.length === 0
+                  ? "No teams available"
+                  : "No team"}
+              </option>
+              {eligibleTeams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Inviting…
+              </>
+            ) : (
+              "Send invitation"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/users/components/EditUserDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import type {
+  UpdateUserInput,
+  User,
+  UserTeamOption,
+} from "../types";
+import { editUserSchema, type EditUserFormValues } from "../userSchemas";
+import { ROLE_LABELS, useRoleOptions } from "../useRoleOptions";
+import { USER_STATUS_LABELS } from "./UserStatusBadge";
+import { Modal } from "./Modal";
+
+interface EditUserDialogProps {
+  readonly open: boolean;
+  readonly user: User | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: UpdateUserInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly teams: UserTeamOption[];
+  readonly teamsLoading: boolean;
+  readonly currentTeamId?: string | null;
+  readonly onTeamChange?: (userId: string, teamId: string | null) => void;
+}
+
+export function EditUserDialog({
+  open,
+  user,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  teams,
+  teamsLoading,
+  currentTeamId,
+  onTeamChange,
+}: EditUserDialogProps) {
+  const { toast } = useToast();
+  const roleOptions = useRoleOptions();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditUserFormValues>({
+    resolver: zodResolver(editUserSchema),
+    defaultValues: {
+      full_name: "",
+      role: "viewer",
+      status: "active",
+      team_id: "",
+    },
+  });
+
+  useEffect(() => {
+    if (open && user) {
+      reset({
+        full_name: user.full_name,
+        role: user.role,
+        status: user.status,
+        team_id: currentTeamId ?? "",
+      });
+    }
+  }, [open, user, currentTeamId, reset]);
+
+  const eligibleTeams = user?.organization_id
+    ? teams.filter((team) => team.organization_id === user.organization_id)
+    : teams;
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!user) return;
+    try {
+      const input: UpdateUserInput = {
+        full_name: values.full_name.trim(),
+        role: values.role,
+        status: values.status,
+      };
+      await onSubmit(user.id, input);
+      onTeamChange?.(user.id, values.team_id ? values.team_id : null);
+      toast({ title: "User updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update user",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && user !== null}
+      onClose={onClose}
+      title={`Edit ${user?.full_name ?? "user"}`}
+      description={user?.email}
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="user-edit-name">Full name</Label>
+          <Input
+            id="user-edit-name"
+            {...register("full_name")}
+            aria-invalid={Boolean(errors.full_name)}
+          />
+          {errors.full_name && (
+            <p className="text-xs text-destructive">
+              {errors.full_name.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="user-edit-role">Role</Label>
+            <select
+              id="user-edit-role"
+              {...register("role")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {ROLE_LABELS[option.value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-edit-status">Status</Label>
+            <select
+              id="user-edit-status"
+              {...register("status")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {(
+                ["active", "invited", "suspended", "deactivated"] as const
+              ).map((value) => (
+                <option key={value} value={value}>
+                  {USER_STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-edit-team">Team</Label>
+            <select
+              id="user-edit-team"
+              {...register("team_id")}
+              disabled={teamsLoading || eligibleTeams.length === 0}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {teamsLoading
+                  ? "Loading…"
+                  : eligibleTeams.length === 0
+                  ? "No teams available"
+                  : "No team"}
+              </option>
+              {eligibleTeams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/users/components/DeactivateUserDialog.tsx
+
+```tsx
+import { Loader2, ShieldAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { User } from "../types";
+import { Modal } from "./Modal";
+
+interface DeactivateUserDialogProps {
+  readonly open: boolean;
+  readonly user: User | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeactivateUserDialog({
+  open,
+  user,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeactivateUserDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!user) return;
+    try {
+      await onConfirm(user.id);
+      toast({ title: "User deactivated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not deactivate user",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && user !== null}
+      onClose={onClose}
+      title="Deactivate user"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <ShieldAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">
+              The user will lose access to the platform.
+            </p>
+            <p className="mt-1 opacity-90">
+              {user ? (
+                <>
+                  You are about to deactivate{" "}
+                  <span className="font-semibold">{user.full_name}</span> (
+                  {user.email}). Existing data will be preserved and you can
+                  reactivate the account later.
+                </>
+              ) : (
+                "User details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !user}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deactivating…
+              </>
+            ) : (
+              "Deactivate user"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/users/components/UsersLoadingState.tsx
+
+```tsx
+export function UsersLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/users/components/UsersErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface UsersErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function UsersErrorState({ message, onRetry }: UsersErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">Failed to load users</h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/users/index.ts
+
+```ts
+export { usersApi } from "./usersApi";
+export { useUsers } from "./useUsers";
+export { useOrganizationOptions } from "./useOrganizationOptions";
+export { useTeamOptions } from "./useTeamOptions";
+export { useRoleOptions, ROLE_LABELS } from "./useRoleOptions";
+export type {
+  InviteUserInput,
+  PaginatedUsers,
+  UpdateUserInput,
+  User,
+  UserListParams,
+  UserOrganizationOption,
+  UserRole,
+  UserStatus,
+  UserTeamOption,
+} from "./types";
+export { DeactivateUserDialog } from "./components/DeactivateUserDialog";
+export { EditUserDialog } from "./components/EditUserDialog";
+export { InviteUserDialog } from "./components/InviteUserDialog";
+export { Modal as UserModal } from "./components/Modal";
+export { Pagination as UsersPagination } from "./components/Pagination";
+export { RoleBadge } from "./components/RoleBadge";
+export { UserFilters } from "./components/UserFilters";
+export { UserStatusBadge } from "./components/UserStatusBadge";
+export { UsersErrorState } from "./components/UsersErrorState";
+export { UsersLoadingState } from "./components/UsersLoadingState";
+export { UsersTable } from "./components/UsersTable";
+```
+
+### frontend/src/pages/users/UsersPage.tsx
+
+```tsx
+import { UserPlus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  DeactivateUserDialog,
+  EditUserDialog,
+  InviteUserDialog,
+  UserFilters,
+  UsersErrorState,
+  UsersLoadingState,
+  UsersPagination,
+  UsersTable,
+  useOrganizationOptions,
+  useTeamOptions,
+  useUsers,
+  type User,
+} from "@/features/users";
+
+const PAGE_SIZE = 20;
+
+export default function UsersPage() {
+  const {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setSearch,
+    setOrganizationId,
+    setTeamId,
+    setRole,
+    setStatus,
+    setPage,
+    resetFilters,
+    refresh,
+    inviteUser,
+    updateUser,
+    deactivateUser,
+  } = useUsers({ limit: PAGE_SIZE });
+
+  const {
+    organizations,
+    isLoading: orgsLoading,
+  } = useOrganizationOptions();
+  const { teams, isLoading: teamsLoading } = useTeamOptions();
+
+  const [isInviteOpen, setInviteOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
+  const [teamByUserId, setTeamByUserId] = useState<
+    Record<string, string | null>
+  >({});
+
+  const totalCount = data?.total ?? 0;
+  const filtersActive =
+    filters.search.trim().length > 0 ||
+    filters.organizationId !== null ||
+    filters.teamId !== null ||
+    filters.role !== null ||
+    filters.status !== "all";
+
+  const visible = filtered.filter((user) => {
+    if (!filters.teamId) return true;
+    return teamByUserId[user.id] === filters.teamId;
+  });
+
+  const hasResults = visible.length > 0;
+
+  const handleTeamAssign = (userId: string, teamId: string | null) => {
+    setTeamByUserId((current) => ({ ...current, [userId]: teamId }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage the people who can access this workspace.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setInviteOpen(true)}>
+          <UserPlus className="h-4 w-4" />
+          Invite user
+        </Button>
+      </header>
+
+      <UserFilters
+        organizations={organizations}
+        teams={teams}
+        isLoadingOrganizations={orgsLoading}
+        isLoadingTeams={teamsLoading}
+        search={filters.search}
+        organizationId={filters.organizationId}
+        teamId={filters.teamId}
+        role={filters.role}
+        status={filters.status}
+        onSearchChange={setSearch}
+        onOrganizationChange={setOrganizationId}
+        onTeamChange={setTeamId}
+        onRoleChange={setRole}
+        onStatusChange={setStatus}
+        onReset={resetFilters}
+      />
+
+      {isLoading && !data ? (
+        <UsersLoadingState />
+      ) : error ? (
+        <UsersErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            filtersActive ? "No users match your filters" : "No users yet"
+          }
+          description={
+            filtersActive
+              ? "Try broadening the search or clearing filters."
+              : "Invite your first user to start collaborating."
+          }
+          action={
+            <div className="flex items-center gap-2">
+              {filtersActive && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetFilters}
+                >
+                  Reset filters
+                </Button>
+              )}
+              <Button type="button" onClick={() => setInviteOpen(true)}>
+                <UserPlus className="h-4 w-4" />
+                Invite user
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <UsersTable
+            users={visible}
+            organizations={organizations}
+            teams={teams}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDeactivate={setDeactivateTarget}
+            teamByUserId={teamByUserId}
+          />
+          <UsersPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <InviteUserDialog
+        open={isInviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onSubmit={async (input) => {
+          await inviteUser(input);
+        }}
+        isSubmitting={isMutating}
+        organizations={organizations}
+        teams={teams}
+        orgsLoading={orgsLoading}
+        teamsLoading={teamsLoading}
+        defaultOrganizationId={filters.organizationId}
+      />
+
+      <EditUserDialog
+        open={editTarget !== null}
+        user={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateUser(id, input);
+        }}
+        isSubmitting={isMutating}
+        teams={teams}
+        teamsLoading={teamsLoading}
+        currentTeamId={editTarget ? teamByUserId[editTarget.id] ?? null : null}
+        onTeamChange={handleTeamAssign}
+      />
+
+      <DeactivateUserDialog
+        open={deactivateTarget !== null}
+        user={deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={async (id) => {
+          await deactivateUser(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `UsersPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const UsersPage = lazy(() => import("@/pages/users/UsersPage"));
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.USERS}
+  element={<ModulePlaceholder title="Users" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.USERS} element={<UsersPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.

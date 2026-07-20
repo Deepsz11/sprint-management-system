@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_VcQVjCIFUvewr_MM_30KbBWr37oFaKuxaaVZRWE3g4M",
+    api_key="sk_PVtpuSIenPkvjzqXt1s8QcZnbCmy2UpHdszgN56vuyo",
 )
 
 model = "claude-opus-4-7"
@@ -94,6 +94,8 @@ The application already has fully working modules:
 
 - Authentication
 - Dashboard
+- Organizations
+- Teams
 - Projects
 - Sprints
 - Work Items
@@ -126,7 +128,7 @@ Instead output:
 MANUAL ROUTER PATCH
 =========================
 
-showing ONLY the required replacement.
+showing ONLY the exact replacement.
 
 Return ONLY newly created files.
 
@@ -134,60 +136,71 @@ Return ONLY newly created files.
 TASK
 ====================================================
 
-Generate a complete Organizations module.
+Generate a complete Users module.
 
 Create ONLY these files:
 
-src/features/organizations/
+src/features/users/
     types.ts
-    organizationsApi.ts
-    organizationSchemas.ts
-    useOrganizations.ts
+    usersApi.ts
+    userSchemas.ts
+    useUsers.ts
+    useOrganizationOptions.ts
+    useTeamOptions.ts
+    useRoleOptions.ts
 
-src/features/organizations/components/
-    OrganizationsTable.tsx
-    OrganizationFilters.tsx
+src/features/users/components/
+    UsersTable.tsx
+    UserFilters.tsx
+    UserStatusBadge.tsx
+    RoleBadge.tsx
     Pagination.tsx
     Modal.tsx
-    CreateOrganizationDialog.tsx
-    EditOrganizationDialog.tsx
-    DeleteOrganizationDialog.tsx
-    OrganizationsLoadingState.tsx
-    OrganizationsErrorState.tsx
+    InviteUserDialog.tsx
+    EditUserDialog.tsx
+    DeactivateUserDialog.tsx
+    UsersLoadingState.tsx
+    UsersErrorState.tsx
 
-src/features/organizations/index.ts
+src/features/users/index.ts
 
-src/pages/organizations/OrganizationsPage.tsx
+src/pages/users/UsersPage.tsx
 
 ====================================================
-ORGANIZATION MODEL
+USER MODEL
 ====================================================
 
-Each organization contains:
+Each user contains:
 
 - id
-- name
-- slug
-- logoUrl
-- industry
-- size
-- website
+- firstName
+- lastName
 - email
+- avatarUrl
+- organizationId
+- teamId
+- role
+- jobTitle
 - phone
-- address
-- city
-- state
-- country
-- postalCode
-- timezone
 - status
+- lastLogin
 - createdAt
 - updatedAt
+
+Roles:
+
+- Org Admin
+- Project Manager
+- Team Lead
+- Member
+- Viewer
 
 Status:
 
 - Active
-- Inactive
+- Invited
+- Suspended
+- Disabled
 
 ====================================================
 PAGE FEATURES
@@ -196,14 +209,20 @@ PAGE FEATURES
 Implement:
 
 ✔ Search
-✔ Filters
+✔ Organization filter
+✔ Team filter
+✔ Role filter
+✔ Status filter
 ✔ Pagination
 ✔ Loading state
 ✔ Empty state
 ✔ Error state
-✔ Create Organization dialog
-✔ Edit Organization dialog
-✔ Delete confirmation dialog
+
+Dialogs:
+
+✔ Invite User
+✔ Edit User
+✔ Deactivate User
 
 ====================================================
 TABLE
@@ -211,32 +230,36 @@ TABLE
 
 Columns:
 
+- Avatar
+- Name
+- Email
 - Organization
-- Industry
-- Size
-- Website
+- Team
+- Role
 - Status
-- Created
+- Last Login
 - Actions
 
 Actions:
 
 - Edit
-- Delete
+- Deactivate
 
 ====================================================
 API
 ====================================================
 
-Follow the same architecture used by:
+Follow exactly the same architecture used by:
 
+- Organizations
+- Teams
 - Projects
 - Sprints
 - Work Items
 - Business Outcomes
 - KPIs
 
-Do not invent a new architecture.
+Do NOT invent a different architecture.
 
 ====================================================
 OUTPUT FORMAT

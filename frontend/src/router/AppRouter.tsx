@@ -22,6 +22,8 @@ const KPIsPage = lazy(() => import("@/pages/kpis/KPIsPage"));
 const OrganizationsPage = lazy(
   () => import("@/pages/organizations/OrganizationsPage"),
 );
+const TeamsPage = lazy(() => import("@/pages/teams/TeamsPage"));
+const UsersPage = lazy(() => import("@/pages/users/UsersPage"));
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -50,14 +52,8 @@ export function AppRouter() {
           >
             <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
             <Route path={ROUTES.ORGANIZATIONS} element={<OrganizationsPage />} />
-            <Route
-              path={ROUTES.TEAMS}
-              element={<ModulePlaceholder title="Teams" />}
-            />
-            <Route
-              path={ROUTES.USERS}
-              element={<ModulePlaceholder title="Users" />}
-            />
+            <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
+            <Route path={ROUTES.USERS} element={<UsersPage />} />
             <Route path={ROUTES.PROJECTS} element={<ProjectsPage />} />
             <Route path={ROUTES.SPRINTS} element={<SprintsPage />} />
             <Route path={ROUTES.WORK_ITEMS} element={<WorkItemsPage />} />
