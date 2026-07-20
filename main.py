@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_VRAEahMSRg4AGp_hCqRBG6tSjFt9lGNP49G7AoxjejE",
+    api_key="sk_YVx9v-81fBcOlmx8zSMcqWdApGkQdDKyzGl2hVANZlE",
 )
 
 model = "claude-opus-4-7"
@@ -88,77 +88,57 @@ Do not regenerate previously generated files.
 messages.append({
     "role": "user",
     "content": """
-    You are a senior React + TypeScript architect.
+    You are extending an existing React + TypeScript SaaS frontend.
 
-Generate the COMPLETE frontend foundation for a production-grade SaaS called Sprint Business Outcome Tracker.
+The frontend foundation is COMPLETE and WORKING.
 
-Tech Stack
-- React 18
-- Vite
-- TypeScript
-- React Router v6
-- TailwindCSS
-- shadcn/ui
-- Axios
-- React Hook Form
-- Zod
+IMPORTANT
 
-Generate ONLY the frontend foundation.
+Do NOT modify, overwrite, regenerate or delete any existing shared files.
 
-Include:
+Especially DO NOT touch:
 
-Project structure
+- src/router/AppRouter.tsx
+- src/router/ProtectedRoute.tsx
+- src/router/PublicRoute.tsx
+- src/components/layout/*
+- src/config/routes.ts
+- src/config/navigation.ts
+- src/features/auth/*
+- src/providers/*
+- src/App.tsx
+- src/main.tsx
 
-Routing
+Generate ONLY the Projects feature.
 
-Authentication
+Create:
 
-Axios API client
+- src/features/projects/*
+- src/pages/projects/ProjectsPage.tsx
+- Project API layer
+- Types
+- Hooks
+- Table
+- Create Project dialog
+- Edit Project dialog
+- Delete confirmation
+- Search
+- Pagination
+- Loading state
+- Empty state
+- Error state
 
-Token storage
+If routing needs to change,
+DO NOT modify AppRouter.tsx.
 
-Theme provider
+Instead, output a separate section called:
 
-Sidebar
+MANUAL ROUTER PATCH
 
-Topbar
+showing exactly what lines need to be added.
 
-App layout
-
-ProtectedRoute
-
-PublicRoute
-
-Dashboard page
-
-Login page
-
-404 page
-
-ModulePlaceholder page
-
-Common UI components
-
-Configuration
-
-Do NOT generate CRUD pages.
-
-Do NOT generate feature modules.
-
-Routes that don't exist yet must point to ModulePlaceholder.
-
-Rules
-
-- Use named exports consistently.
-- Use ROUTES (uppercase) everywhere.
-- Never use default exports except App.tsx.
-- Do not generate duplicate layouts.
-- Do not generate duplicate routers.
-- Generate complete working files only.
-- Every import must reference an existing file.
-- Do not invent components.
-
-Return all frontend files.
+Do not overwrite existing files.
+Return only newly created files.
      """
 })
 # -----------------------------

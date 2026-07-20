@@ -21122,3 +21122,1683 @@ The dev server proxies `/api` to the backend at `http://localhost:8000`.
 - `AuthProvider` wraps the app and handles token storage, refresh, and the
   current user.
 ```
+
+================================================================================
+
+### frontend/src/features/projects/types.ts
+
+```ts
+export interface Project {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly team_id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly slug: string;
+  readonly description: string | null;
+  readonly start_date: string | null;
+  readonly target_end_date: string | null;
+  readonly is_archived: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface Team {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly description: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface CreateProjectInput {
+  readonly team_id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly slug: string;
+  readonly description?: string | null;
+  readonly start_date?: string | null;
+  readonly target_end_date?: string | null;
+}
+
+export interface UpdateProjectInput {
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly start_date?: string | null;
+  readonly target_end_date?: string | null;
+  readonly is_archived?: boolean;
+}
+
+export interface PaginatedProjects {
+  readonly items: Project[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedTeams {
+  readonly items: Team[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface ProjectListParams {
+  readonly limit: number;
+  readonly offset: number;
+  readonly team_id?: string;
+  readonly include_archived?: boolean;
+}
+```
+
+### frontend/src/features/projects/projectsApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  CreateProjectInput,
+  PaginatedProjects,
+  PaginatedTeams,
+  Project,
+  ProjectListParams,
+  UpdateProjectInput,
+} from "./types";
+
+export const projectsApi = {
+  async list(params: ProjectListParams): Promise<PaginatedProjects> {
+    const query: Record<string, string | number | boolean> = {
+      limit: params.limit,
+      offset: params.offset,
+      include_archived: params.include_archived ?? false,
+    };
+    if (params.team_id) {
+      query.team_id = params.team_id;
+    }
+    const response = await apiClient.get<PaginatedProjects>(
+      API_ENDPOINTS.PROJECTS,
+      { params: query },
+    );
+    return response.data;
+  },
+
+  async get(id: string): Promise<Project> {
+    const response = await apiClient.get<Project>(
+      `${API_ENDPOINTS.PROJECTS}/${id}`,
+    );
+    return response.data;
+  },
+
+  async create(input: CreateProjectInput): Promise<Project> {
+    const response = await apiClient.post<Project>(
+      API_ENDPOINTS.PROJECTS,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(id: string, input: UpdateProjectInput): Promise<Project> {
+    const response = await apiClient.patch<Project>(
+      `${API_ENDPOINTS.PROJECTS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.PROJECTS}/${id}`);
+  },
+
+  async listTeams(): Promise<PaginatedTeams> {
+    const response = await apiClient.get<PaginatedTeams>(API_ENDPOINTS.TEAMS, {
+      params: { limit: 200, offset: 0 },
+    });
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/projects/projectSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const keyRegex = /^[A-Z0-9]+$/;
+
+const optionalDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+  .optional()
+  .or(z.literal(""));
+
+export const createProjectSchema = z
+  .object({
+    team_id: z.string().uuid("Select a team"),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(200, "Name must be 200 characters or fewer"),
+    key: z
+      .string()
+      .trim()
+      .min(2, "Key must be between 2 and 12 characters")
+      .max(12, "Key must be between 2 and 12 characters")
+      .regex(keyRegex, "Key must be uppercase alphanumeric")
+      .transform((v) => v.toUpperCase()),
+    slug: z
+      .string()
+      .trim()
+      .min(2, "Slug must be between 2 and 64 characters")
+      .max(64, "Slug must be between 2 and 64 characters")
+      .regex(
+        slugRegex,
+        "Slug must be lowercase alphanumeric with hyphens",
+      ),
+    description: z
+      .string()
+      .trim()
+      .max(2000, "Description must be 2000 characters or fewer")
+      .optional()
+      .or(z.literal("")),
+    start_date: optionalDate,
+    target_end_date: optionalDate,
+  })
+  .superRefine((values, ctx) => {
+    if (values.start_date && values.target_end_date) {
+      if (values.target_end_date < values.start_date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Target end date cannot be before start date",
+          path: ["target_end_date"],
+        });
+      }
+    }
+  });
+
+export type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
+
+export const editProjectSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(200, "Name must be 200 characters or fewer"),
+    description: z
+      .string()
+      .trim()
+      .max(2000, "Description must be 2000 characters or fewer")
+      .optional()
+      .or(z.literal("")),
+    start_date: optionalDate,
+    target_end_date: optionalDate,
+    is_archived: z.boolean(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.start_date && values.target_end_date) {
+      if (values.target_end_date < values.start_date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Target end date cannot be before start date",
+          path: ["target_end_date"],
+        });
+      }
+    }
+  });
+
+export type EditProjectFormValues = z.infer<typeof editProjectSchema>;
+```
+
+### frontend/src/features/projects/useProjects.ts
+
+```ts
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { toApiError, ApiError } from "@/api/errors";
+
+import { projectsApi } from "./projectsApi";
+import type {
+  CreateProjectInput,
+  PaginatedProjects,
+  Project,
+  ProjectListParams,
+  UpdateProjectInput,
+} from "./types";
+
+interface UseProjectsOptions {
+  readonly limit: number;
+}
+
+interface UseProjectsResult {
+  readonly data: PaginatedProjects | null;
+  readonly filtered: Project[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly search: string;
+  readonly includeArchived: boolean;
+  readonly setSearch: (value: string) => void;
+  readonly setIncludeArchived: (value: boolean) => void;
+  readonly setPage: (page: number) => void;
+  readonly refresh: () => Promise<void>;
+  readonly createProject: (input: CreateProjectInput) => Promise<Project>;
+  readonly updateProject: (
+    id: string,
+    input: UpdateProjectInput,
+  ) => Promise<Project>;
+  readonly deleteProject: (id: string) => Promise<void>;
+}
+
+export function useProjects(
+  options: UseProjectsOptions = { limit: 20 },
+): UseProjectsResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedProjects | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [search, setSearch] = useState<string>("");
+  const [includeArchived, setIncludeArchived] = useState<boolean>(false);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number, archived: boolean) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: ProjectListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+          include_archived: archived,
+        };
+        const result = await projectsApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page, includeArchived);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page, includeArchived]);
+
+  const refresh = useCallback(async () => {
+    await load(page, includeArchived);
+  }, [load, page, includeArchived]);
+
+  const createProject = useCallback(
+    async (input: CreateProjectInput) => {
+      setIsMutating(true);
+      try {
+        const created = await projectsApi.create(input);
+        await load(1, includeArchived);
+        setPage(1);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, includeArchived],
+  );
+
+  const updateProject = useCallback(
+    async (id: string, input: UpdateProjectInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await projectsApi.update(id, input);
+        await load(page, includeArchived);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, includeArchived],
+  );
+
+  const deleteProject = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await projectsApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage, includeArchived);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page, includeArchived],
+  );
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const term = search.trim().toLowerCase();
+    if (!term) return data.items;
+    return data.items.filter((project) => {
+      return (
+        project.name.toLowerCase().includes(term) ||
+        project.key.toLowerCase().includes(term) ||
+        project.slug.toLowerCase().includes(term) ||
+        (project.description ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [data, search]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    search,
+    includeArchived,
+    setSearch,
+    setIncludeArchived,
+    setPage,
+    refresh,
+    createProject,
+    updateProject,
+    deleteProject,
+  };
+}
+```
+
+### frontend/src/features/projects/useTeams.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { projectsApi } from "./projectsApi";
+import type { Team } from "./types";
+
+interface UseTeamsResult {
+  readonly teams: Team[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useTeams(): UseTeamsResult {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await projectsApi.listTeams();
+        if (!cancelled) setTeams(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { teams, isLoading, error };
+}
+```
+
+### frontend/src/features/projects/components/ProjectStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+interface ProjectStatusBadgeProps {
+  readonly isArchived: boolean;
+}
+
+export function ProjectStatusBadge({ isArchived }: ProjectStatusBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        isArchived
+          ? "border border-border bg-muted text-muted-foreground"
+          : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      )}
+    >
+      {isArchived ? "Archived" : "Active"}
+    </span>
+  );
+}
+```
+
+### frontend/src/features/projects/components/ProjectSearch.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Input } from "@/components/ui/Input";
+
+interface ProjectSearchProps {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly includeArchived: boolean;
+  readonly onIncludeArchivedChange: (value: boolean) => void;
+}
+
+export function ProjectSearch({
+  value,
+  onChange,
+  includeArchived,
+  onIncludeArchivedChange,
+}: ProjectSearchProps) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative w-full sm:max-w-sm">
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          type="search"
+          placeholder="Search by name, key, slug…"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="pl-9"
+          aria-label="Search projects"
+        />
+      </div>
+
+      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={includeArchived}
+          onChange={(event) => onIncludeArchivedChange(event.target.checked)}
+          className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring"
+        />
+        Include archived
+      </label>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/projects/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/projects/components/ProjectsTable.tsx
+
+```tsx
+import { Archive, ArchiveRestore, Pencil, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type { Project } from "../types";
+import { ProjectStatusBadge } from "./ProjectStatusBadge";
+
+interface ProjectsTableProps {
+  readonly projects: Project[];
+  readonly onEdit: (project: Project) => void;
+  readonly onDelete: (project: Project) => void;
+  readonly onToggleArchive: (project: Project) => void;
+  readonly isMutating: boolean;
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+export function ProjectsTable({
+  projects,
+  onEdit,
+  onDelete,
+  onToggleArchive,
+  isMutating,
+}: ProjectsTableProps) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Key
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Name
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Start
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Target End
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {projects.map((project) => (
+              <tr
+                key={project.id}
+                className={cn(
+                  "transition-colors hover:bg-muted/30",
+                  project.is_archived && "opacity-70",
+                )}
+              >
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">
+                  {project.key}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">
+                      {project.name}
+                    </span>
+                    {project.description && (
+                      <span className="line-clamp-1 text-xs text-muted-foreground">
+                        {project.description}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <ProjectStatusBadge isArchived={project.is_archived} />
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatDate(project.start_date)}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatDate(project.target_end_date)}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${project.name}`}
+                      onClick={() => onEdit(project)}
+                      disabled={isMutating}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={
+                        project.is_archived
+                          ? `Restore ${project.name}`
+                          : `Archive ${project.name}`
+                      }
+                      onClick={() => onToggleArchive(project)}
+                      disabled={isMutating}
+                    >
+                      {project.is_archived ? (
+                        <ArchiveRestore className="h-4 w-4" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${project.name}`}
+                      onClick={() => onDelete(project)}
+                      disabled={isMutating}
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/projects/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/projects/components/CreateProjectDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import { useTeams } from "../useTeams";
+import {
+  createProjectSchema,
+  type CreateProjectFormValues,
+} from "../projectSchemas";
+import type { CreateProjectInput } from "../types";
+import { Modal } from "./Modal";
+
+interface CreateProjectDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateProjectInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+function keyify(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 12);
+}
+
+export function CreateProjectDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: CreateProjectDialogProps) {
+  const { teams, isLoading: teamsLoading, error: teamsError } = useTeams();
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateProjectFormValues>({
+    resolver: zodResolver(createProjectSchema),
+    defaultValues: {
+      team_id: "",
+      name: "",
+      key: "",
+      slug: "",
+      description: "",
+      start_date: "",
+      target_end_date: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!open) reset();
+  }, [open, reset]);
+
+  const nameValue = watch("name");
+  const keyValue = watch("key");
+  const slugValue = watch("slug");
+
+  useEffect(() => {
+    if (!nameValue) return;
+    if (!keyValue) {
+      setValue("key", keyify(nameValue), { shouldValidate: false });
+    }
+    if (!slugValue) {
+      setValue("slug", slugify(nameValue), { shouldValidate: false });
+    }
+  }, [nameValue, keyValue, slugValue, setValue]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: CreateProjectInput = {
+        team_id: values.team_id,
+        name: values.name.trim(),
+        key: values.key.trim().toUpperCase(),
+        slug: values.slug.trim().toLowerCase(),
+        description: values.description ? values.description.trim() : null,
+        start_date: values.start_date ? values.start_date : null,
+        target_end_date: values.target_end_date ? values.target_end_date : null,
+      };
+      await onSubmit(input);
+      toast({ title: "Project created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create project",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create project"
+      description="Projects group sprints, work items, and outcomes."
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="team_id">Team</Label>
+          {teamsError && (
+            <p className="text-xs text-destructive">{teamsError.message}</p>
+          )}
+          <select
+            id="team_id"
+            {...register("team_id")}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            disabled={teamsLoading}
+            aria-invalid={Boolean(errors.team_id)}
+          >
+            <option value="">
+              {teamsLoading ? "Loading teams…" : "Select a team"}
+            </option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+          {errors.team_id && (
+            <p className="text-xs text-destructive">{errors.team_id.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input
+            id="name"
+            placeholder="e.g. Sprint Outcome Tracer"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="key">Key</Label>
+            <Input
+              id="key"
+              placeholder="SBOT"
+              {...register("key")}
+              aria-invalid={Boolean(errors.key)}
+            />
+            {errors.key && (
+              <p className="text-xs text-destructive">{errors.key.message}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="slug">Slug</Label>
+            <Input
+              id="slug"
+              placeholder="sprint-outcome-tracer"
+              {...register("slug")}
+              aria-invalid={Boolean(errors.slug)}
+            />
+            {errors.slug && (
+              <p className="text-xs text-destructive">{errors.slug.message}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="description">Description</Label>
+          <textarea
+            id="description"
+            rows={3}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Optional summary of what the project delivers"
+            {...register("description")}
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="start_date">Start date</Label>
+            <Input
+              id="start_date"
+              type="date"
+              {...register("start_date")}
+              aria-invalid={Boolean(errors.start_date)}
+            />
+            {errors.start_date && (
+              <p className="text-xs text-destructive">
+                {errors.start_date.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="target_end_date">Target end date</Label>
+            <Input
+              id="target_end_date"
+              type="date"
+              {...register("target_end_date")}
+              aria-invalid={Boolean(errors.target_end_date)}
+            />
+            {errors.target_end_date && (
+              <p className="text-xs text-destructive">
+                {errors.target_end_date.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create project"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/projects/components/EditProjectDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import {
+  editProjectSchema,
+  type EditProjectFormValues,
+} from "../projectSchemas";
+import type { Project, UpdateProjectInput } from "../types";
+import { Modal } from "./Modal";
+
+interface EditProjectDialogProps {
+  readonly open: boolean;
+  readonly project: Project | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: UpdateProjectInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function EditProjectDialog({
+  open,
+  project,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: EditProjectDialogProps) {
+  const { toast } = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditProjectFormValues>({
+    resolver: zodResolver(editProjectSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      start_date: "",
+      target_end_date: "",
+      is_archived: false,
+    },
+  });
+
+  useEffect(() => {
+    if (open && project) {
+      reset({
+        name: project.name,
+        description: project.description ?? "",
+        start_date: project.start_date ?? "",
+        target_end_date: project.target_end_date ?? "",
+        is_archived: project.is_archived,
+      });
+    }
+  }, [open, project, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!project) return;
+    try {
+      const input: UpdateProjectInput = {
+        name: values.name.trim(),
+        description: values.description ? values.description.trim() : null,
+        start_date: values.start_date ? values.start_date : null,
+        target_end_date: values.target_end_date ? values.target_end_date : null,
+        is_archived: values.is_archived,
+      };
+      await onSubmit(project.id, input);
+      toast({ title: "Project updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update project",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && project !== null}
+      onClose={onClose}
+      title={`Edit ${project?.name ?? "project"}`}
+      description={
+        project ? `${project.key} • ${project.slug}` : undefined
+      }
+      maxWidthClassName="max-w-xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="edit-name">Name</Label>
+          <Input
+            id="edit-name"
+            {...register("name")}
+            aria-invalid={Boolean(errors.name)}
+          />
+          {errors.name && (
+            <p className="text-xs text-destructive">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-description">Description</Label>
+          <textarea
+            id="edit-description"
+            rows={3}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            {...register("description")}
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-start">Start date</Label>
+            <Input
+              id="edit-start"
+              type="date"
+              {...register("start_date")}
+              aria-invalid={Boolean(errors.start_date)}
+            />
+            {errors.start_date && (
+              <p className="text-xs text-destructive">
+                {errors.start_date.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-target">Target end date</Label>
+            <Input
+              id="edit-target"
+              type="date"
+              {...register("target_end_date")}
+              aria-invalid={Boolean(errors.target_end_date)}
+            />
+            {errors.target_end_date && (
+              <p className="text-xs text-destructive">
+                {errors.target_end_date.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring"
+            {...register("is_archived")}
+          />
+          Archived
+        </label>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/projects/components/DeleteProjectDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { Project } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteProjectDialogProps {
+  readonly open: boolean;
+  readonly project: Project | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteProjectDialog({
+  open,
+  project,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteProjectDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!project) return;
+    try {
+      await onConfirm(project.id);
+      toast({ title: "Project deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete project",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && project !== null}
+      onClose={onClose}
+      title="Delete project"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {project ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{project.name}</span> (
+                  <span className="font-mono">{project.key}</span>).
+                </>
+              ) : (
+                "Project details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !project}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete project"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/projects/components/ProjectsErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface ProjectsErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function ProjectsErrorState({
+  message,
+  onRetry,
+}: ProjectsErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">
+          Failed to load projects
+        </h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/projects/components/ProjectsLoadingState.tsx
+
+```tsx
+export function ProjectsLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-24 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/projects/index.ts
+
+```ts
+export { projectsApi } from "./projectsApi";
+export { useProjects } from "./useProjects";
+export { useTeams } from "./useTeams";
+export type {
+  CreateProjectInput,
+  PaginatedProjects,
+  Project,
+  ProjectListParams,
+  Team,
+  UpdateProjectInput,
+} from "./types";
+export { CreateProjectDialog } from "./components/CreateProjectDialog";
+export { DeleteProjectDialog } from "./components/DeleteProjectDialog";
+export { EditProjectDialog } from "./components/EditProjectDialog";
+export { Pagination } from "./components/Pagination";
+export { ProjectSearch } from "./components/ProjectSearch";
+export { ProjectStatusBadge } from "./components/ProjectStatusBadge";
+export { ProjectsErrorState } from "./components/ProjectsErrorState";
+export { ProjectsLoadingState } from "./components/ProjectsLoadingState";
+export { ProjectsTable } from "./components/ProjectsTable";
+```
+
+### frontend/src/pages/projects/ProjectsPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  CreateProjectDialog,
+  DeleteProjectDialog,
+  EditProjectDialog,
+  Pagination,
+  ProjectSearch,
+  ProjectsErrorState,
+  ProjectsLoadingState,
+  ProjectsTable,
+  useProjects,
+  type Project,
+} from "@/features/projects";
+import { useToast } from "@/providers/ToastProvider";
+
+const PAGE_SIZE = 20;
+
+export default function ProjectsPage() {
+  const {
+    data,
+    filtered,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    search,
+    includeArchived,
+    setSearch,
+    setIncludeArchived,
+    setPage,
+    refresh,
+    createProject,
+    updateProject,
+    deleteProject,
+  } = useProjects({ limit: PAGE_SIZE });
+  const { toast } = useToast();
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<Project | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+
+  const handleToggleArchive = async (project: Project) => {
+    try {
+      await updateProject(project.id, { is_archived: !project.is_archived });
+      toast({
+        title: project.is_archived
+          ? "Project restored"
+          : "Project archived",
+        variant: "success",
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      toast({
+        title: "Could not update project",
+        description: message,
+        variant: "error",
+      });
+    }
+  };
+
+  const hasResults = filtered.length > 0;
+  const totalCount = data?.total ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage the projects that group sprints, work items, and outcomes.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New project
+        </Button>
+      </header>
+
+      <ProjectSearch
+        value={search}
+        onChange={setSearch}
+        includeArchived={includeArchived}
+        onIncludeArchivedChange={(value) => {
+          setIncludeArchived(value);
+          setPage(1);
+        }}
+      />
+
+      {isLoading && !data ? (
+        <ProjectsLoadingState />
+      ) : error ? (
+        <ProjectsErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            search
+              ? "No projects match your search"
+              : "No projects yet"
+          }
+          description={
+            search
+              ? "Try a different name, key, or slug — or clear the search."
+              : "Create your first project to start tracking sprints and outcomes."
+          }
+          action={
+            !search ? (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New project
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSearch("")}
+              >
+                Clear search
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <ProjectsTable
+            projects={filtered}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+            onToggleArchive={(project) => void handleToggleArchive(project)}
+          />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateProjectDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createProject(input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <EditProjectDialog
+        open={editTarget !== null}
+        project={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateProject(id, input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <DeleteProjectDialog
+        open={deleteTarget !== null}
+        project={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteProject(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Replace the current `ROUTES.PROJECTS` placeholder route inside `src/router/AppRouter.tsx` with a real `ProjectsPage` route.
+
+1. Add this lazy import near the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const ProjectsPage = lazy(() => import("@/pages/projects/ProjectsPage"));
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.PROJECTS}
+  element={<ModulePlaceholder title="Projects" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.PROJECTS} element={<ProjectsPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.
