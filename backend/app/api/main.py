@@ -15,6 +15,9 @@ from app.api.routers.teams import router as teams_router
 from app.api.routers.users import router as users_router
 from app.core.config import settings
 from app.core.logging import configure_logging
+from app.api.routers.work_items import router as work_items_router
+from app.api.routers.business_outcomes import router as business_outcomes_router
+from app.api.routers.kpis import router as kpis_router
 
 
 def create_app() -> FastAPI:
@@ -46,6 +49,9 @@ def create_app() -> FastAPI:
     app.include_router(users_router, prefix=settings.API_V1_PREFIX)
     app.include_router(projects_router, prefix=settings.API_V1_PREFIX)
     app.include_router(sprints_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(work_items_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(business_outcomes_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(kpis_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 client = OpenAI(
     base_url="https://api.highwayapi.ai/openai",
-    api_key="sk_1U_dqvTbzuNPCHqsvqt645Cl9E0gM_R7HZAp3psk704",
+    api_key="sk__s-4ZUpPMgxicto4jR8HL0ipVwU6HlIcp7dbvIxg-4I",
 )
 
 model = "claude-opus-4-7"
@@ -90,49 +90,170 @@ messages.append({
     "content": """
     You are extending an existing React + TypeScript SaaS frontend.
 
-The frontend foundation and Projects module are COMPLETE and WORKING.
+The application already has:
 
-IMPORTANT
+- Authentication
+- Dashboard
+- Projects module
+- Sprints module
 
-Do NOT modify, overwrite, regenerate or delete any existing shared files.
+These modules are COMPLETE and WORKING.
 
-Do NOT touch:
+====================================================
+IMPORTANT RULES (READ CAREFULLY)
+====================================================
 
-- src/router/*
-- src/components/layout/*
-- src/config/*
-- src/features/auth/*
-- src/providers/*
-- src/App.tsx
-- src/main.tsx
+DO NOT modify, overwrite, regenerate, delete or reformat ANY existing files.
 
-Generate ONLY the Sprints feature.
+Especially DO NOT touch:
 
-Create:
+src/router/*
+src/components/layout/*
+src/providers/*
+src/config/*
+src/features/auth/*
+src/App.tsx
+src/main.tsx
 
-- src/features/sprints/*
-- src/pages/sprints/SprintsPage.tsx
-- Sprint API layer
-- Types
-- Hooks
-- Table
-- Create Sprint dialog
-- Edit Sprint dialog
-- Delete confirmation
-- Search
-- Pagination
-- Loading state
-- Empty state
-- Error state
+If any shared file requires changes,
+DO NOT regenerate it.
 
-If routing needs to change,
-DO NOT modify AppRouter.tsx.
-
-Instead output:
+Instead output a section named:
 
 MANUAL ROUTER PATCH
 
-Return only newly created files.
+showing only the exact code that must be manually replaced.
+
+Never rewrite existing files.
+
+Return ONLY newly created files.
+
+====================================================
+TASK
+====================================================
+
+Generate a complete Work Items module.
+
+Create ONLY these files:
+
+src/features/work-items/
+    types.ts
+    workItemsApi.ts
+    workItemSchemas.ts
+    useWorkItems.ts
+    useSprintOptions.ts
+    useAssigneeOptions.ts
+
+src/features/work-items/components/
+    WorkItemsTable.tsx
+    WorkItemFilters.tsx
+    WorkItemStatusBadge.tsx
+    Pagination.tsx
+    Modal.tsx
+    CreateWorkItemDialog.tsx
+    EditWorkItemDialog.tsx
+    DeleteWorkItemDialog.tsx
+    WorkItemsLoadingState.tsx
+    WorkItemsErrorState.tsx
+
+src/features/work-items/index.ts
+
+src/pages/work-items/WorkItemsPage.tsx
+
+====================================================
+WORK ITEM MODEL
+====================================================
+
+Each work item should support:
+
+- id
+- title
+- description
+- sprintId
+- assigneeId
+- priority
+- status
+- estimate
+- storyPoints
+- dueDate
+- createdAt
+- updatedAt
+
+Priority:
+
+- Low
+- Medium
+- High
+- Critical
+
+Status:
+
+- Backlog
+- Todo
+- In Progress
+- In Review
+- Done
+- Blocked
+
+====================================================
+PAGE FEATURES
+====================================================
+
+Implement:
+
+✔ Search
+✔ Filters
+✔ Pagination
+✔ Loading state
+✔ Empty state
+✔ Error state
+✔ Create Work Item dialog
+✔ Edit Work Item dialog
+✔ Delete confirmation dialog
+
+====================================================
+TABLE
+====================================================
+
+Columns:
+
+- Title
+- Sprint
+- Assignee
+- Priority
+- Status
+- Story Points
+- Due Date
+- Actions
+
+Actions:
+
+- Edit
+- Delete
+
+====================================================
+API
+====================================================
+
+Use the same API patterns already used by Projects and Sprints.
+
+Do not invent a different architecture.
+
+====================================================
+OUTPUT FORMAT
+====================================================
+
+Return ONLY new files.
+
+Do NOT regenerate existing files.
+
+If routing changes are required, output ONLY:
+
+MANUAL ROUTER PATCH
+
+with the exact replacement needed inside AppRouter.tsx.
+
+No other shared files should be modified.
      """
 })
 # -----------------------------

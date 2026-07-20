@@ -14,6 +14,7 @@ const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
 const ModulePlaceholder = lazy(() => import("@/pages/ModulePlaceholder"));
 const ProjectsPage = lazy(() => import("@/pages/projects/ProjectsPage"));
 const SprintsPage = lazy(() => import("@/pages/sprints/SprintsPage"));
+const WorkItemsPage = lazy(() => import("@/pages/work-items/WorkItemsPage"));
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -55,10 +56,7 @@ export function AppRouter() {
             />
             <Route path={ROUTES.PROJECTS} element={<ProjectsPage />} />
             <Route path={ROUTES.SPRINTS} element={<SprintsPage />} />
-            <Route
-              path={ROUTES.WORK_ITEMS}
-              element={<ModulePlaceholder title="Work Items" />}
-            />
+            <Route path={ROUTES.WORK_ITEMS} element={<WorkItemsPage />} />
             <Route
               path={ROUTES.BUSINESS_OUTCOMES}
               element={<ModulePlaceholder title="Business Outcomes" />}

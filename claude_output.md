@@ -24768,3 +24768,2490 @@ with:
 ```
 
 No other lines in `AppRouter.tsx` need to change.
+
+================================================================================
+
+### frontend/src/features/work-items/types.ts
+
+```ts
+export type WorkItemType = "epic" | "story" | "task" | "bug" | "spike";
+
+export type WorkItemStatus =
+  | "backlog"
+  | "todo"
+  | "in_progress"
+  | "in_review"
+  | "done"
+  | "cancelled";
+
+export type WorkItemPriority = "critical" | "high" | "medium" | "low";
+
+export interface WorkItem {
+  readonly id: string;
+  readonly project_id: string;
+  readonly sprint_id: string | null;
+  readonly parent_id: string | null;
+  readonly epic_id: string | null;
+  readonly external_key: string | null;
+  readonly title: string;
+  readonly description: string | null;
+  readonly item_type: WorkItemType;
+  readonly status: WorkItemStatus;
+  readonly priority: WorkItemPriority;
+  readonly story_points: number | null;
+  readonly estimated_hours: number | null;
+  readonly actual_hours: number | null;
+  readonly assignee_id: string | null;
+  readonly reporter_id: string | null;
+  readonly labels: string[];
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface WorkItemProjectOption {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly team_id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly slug: string;
+  readonly is_archived: boolean;
+}
+
+export interface WorkItemSprintOption {
+  readonly id: string;
+  readonly project_id: string;
+  readonly name: string;
+  readonly status: string;
+  readonly start_date: string;
+  readonly end_date: string;
+}
+
+export interface WorkItemAssigneeOption {
+  readonly id: string;
+  readonly email: string;
+  readonly full_name: string;
+  readonly organization_id: string | null;
+  readonly role: string;
+  readonly status: string;
+}
+
+export interface PaginatedWorkItems {
+  readonly items: WorkItem[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedProjectsResponse {
+  readonly items: WorkItemProjectOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedSprintsResponse {
+  readonly items: WorkItemSprintOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface PaginatedUsersResponse {
+  readonly items: WorkItemAssigneeOption[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface CreateWorkItemInput {
+  readonly project_id: string;
+  readonly sprint_id?: string | null;
+  readonly title: string;
+  readonly description?: string | null;
+  readonly item_type: WorkItemType;
+  readonly priority: WorkItemPriority;
+  readonly story_points?: number | null;
+  readonly estimated_hours?: number | null;
+  readonly assignee_id?: string | null;
+  readonly labels?: string[];
+}
+
+export interface UpdateWorkItemInput {
+  readonly title?: string;
+  readonly description?: string | null;
+  readonly priority?: WorkItemPriority;
+  readonly status?: WorkItemStatus;
+  readonly story_points?: number | null;
+  readonly estimated_hours?: number | null;
+  readonly sprint_id?: string | null;
+  readonly assignee_id?: string | null;
+  readonly labels?: string[];
+}
+
+export interface WorkItemListParams {
+  readonly limit: number;
+  readonly offset: number;
+  readonly project_id?: string;
+  readonly sprint_id?: string;
+  readonly assignee_id?: string;
+  readonly item_type?: readonly WorkItemType[];
+  readonly status?: readonly WorkItemStatus[];
+  readonly priority?: readonly WorkItemPriority[];
+  readonly search?: string;
+}
+```
+
+### frontend/src/features/work-items/workItemsApi.ts
+
+```ts
+import { apiClient } from "@/api/client";
+import { API_ENDPOINTS } from "@/api/endpoints";
+
+import type {
+  CreateWorkItemInput,
+  PaginatedProjectsResponse,
+  PaginatedSprintsResponse,
+  PaginatedUsersResponse,
+  PaginatedWorkItems,
+  UpdateWorkItemInput,
+  WorkItem,
+  WorkItemListParams,
+} from "./types";
+
+function buildParams(params: WorkItemListParams): Record<string, unknown> {
+  const query: Record<string, unknown> = {
+    limit: params.limit,
+    offset: params.offset,
+  };
+  if (params.project_id) query.project_id = params.project_id;
+  if (params.sprint_id) query.sprint_id = params.sprint_id;
+  if (params.assignee_id) query.assignee_id = params.assignee_id;
+  if (params.item_type && params.item_type.length > 0) {
+    query.item_type = [...params.item_type];
+  }
+  if (params.status && params.status.length > 0) {
+    query.status = [...params.status];
+  }
+  if (params.priority && params.priority.length > 0) {
+    query.priority = [...params.priority];
+  }
+  if (params.search && params.search.trim().length > 0) {
+    query.search = params.search.trim();
+  }
+  return query;
+}
+
+export const workItemsApi = {
+  async list(params: WorkItemListParams): Promise<PaginatedWorkItems> {
+    const response = await apiClient.get<PaginatedWorkItems>(
+      API_ENDPOINTS.WORK_ITEMS,
+      { params: buildParams(params) },
+    );
+    return response.data;
+  },
+
+  async get(id: string): Promise<WorkItem> {
+    const response = await apiClient.get<WorkItem>(
+      `${API_ENDPOINTS.WORK_ITEMS}/${id}`,
+    );
+    return response.data;
+  },
+
+  async create(input: CreateWorkItemInput): Promise<WorkItem> {
+    const response = await apiClient.post<WorkItem>(
+      API_ENDPOINTS.WORK_ITEMS,
+      input,
+    );
+    return response.data;
+  },
+
+  async update(id: string, input: UpdateWorkItemInput): Promise<WorkItem> {
+    const response = await apiClient.patch<WorkItem>(
+      `${API_ENDPOINTS.WORK_ITEMS}/${id}`,
+      input,
+    );
+    return response.data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${API_ENDPOINTS.WORK_ITEMS}/${id}`);
+  },
+
+  async listProjects(): Promise<PaginatedProjectsResponse> {
+    const response = await apiClient.get<PaginatedProjectsResponse>(
+      API_ENDPOINTS.PROJECTS,
+      { params: { limit: 200, offset: 0, include_archived: false } },
+    );
+    return response.data;
+  },
+
+  async listSprints(projectId: string): Promise<PaginatedSprintsResponse> {
+    const response = await apiClient.get<PaginatedSprintsResponse>(
+      API_ENDPOINTS.SPRINTS,
+      { params: { project_id: projectId, limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+
+  async listUsers(): Promise<PaginatedUsersResponse> {
+    const response = await apiClient.get<PaginatedUsersResponse>(
+      API_ENDPOINTS.USERS,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return response.data;
+  },
+};
+```
+
+### frontend/src/features/work-items/workItemSchemas.ts
+
+```ts
+import { z } from "zod";
+
+const ITEM_TYPES = ["epic", "story", "task", "bug", "spike"] as const;
+const PRIORITIES = ["critical", "high", "medium", "low"] as const;
+const STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+  "cancelled",
+] as const;
+
+const optionalDescription = z
+  .string()
+  .trim()
+  .max(10000, "Description must be 10000 characters or fewer")
+  .optional()
+  .or(z.literal(""));
+
+const optionalPoints = z
+  .union([
+    z.literal(""),
+    z.coerce
+      .number({ invalid_type_error: "Enter a number" })
+      .int("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .max(1000, "Value is too large"),
+  ])
+  .optional();
+
+const optionalHours = z
+  .union([
+    z.literal(""),
+    z.coerce
+      .number({ invalid_type_error: "Enter a number" })
+      .min(0, "Cannot be negative")
+      .max(10000, "Value is too large"),
+  ])
+  .optional();
+
+const optionalLabels = z
+  .string()
+  .trim()
+  .max(2000, "Labels string is too long")
+  .optional()
+  .or(z.literal(""));
+
+export const createWorkItemSchema = z.object({
+  project_id: z.string().uuid("Select a project"),
+  sprint_id: z.string().uuid().optional().or(z.literal("")),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Title is required")
+    .max(500, "Title must be 500 characters or fewer"),
+  description: optionalDescription,
+  item_type: z.enum(ITEM_TYPES),
+  priority: z.enum(PRIORITIES),
+  story_points: optionalPoints,
+  estimated_hours: optionalHours,
+  assignee_id: z.string().uuid().optional().or(z.literal("")),
+  labels: optionalLabels,
+});
+
+export type CreateWorkItemFormValues = z.infer<typeof createWorkItemSchema>;
+
+export const editWorkItemSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "Title is required")
+    .max(500, "Title must be 500 characters or fewer"),
+  description: optionalDescription,
+  status: z.enum(STATUSES),
+  priority: z.enum(PRIORITIES),
+  story_points: optionalPoints,
+  estimated_hours: optionalHours,
+  sprint_id: z.string().uuid().optional().or(z.literal("")),
+  assignee_id: z.string().uuid().optional().or(z.literal("")),
+  labels: optionalLabels,
+});
+
+export type EditWorkItemFormValues = z.infer<typeof editWorkItemSchema>;
+
+export const ITEM_TYPE_OPTIONS = ITEM_TYPES;
+export const PRIORITY_OPTIONS = PRIORITIES;
+export const STATUS_OPTIONS = STATUSES;
+
+export function parseLabels(raw: string | undefined | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token.length > 0);
+}
+
+export function stringifyLabels(labels: string[] | undefined | null): string {
+  if (!labels || labels.length === 0) return "";
+  return labels.join(", ");
+}
+```
+
+### frontend/src/features/work-items/useWorkItems.ts
+
+```ts
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { workItemsApi } from "./workItemsApi";
+import type {
+  CreateWorkItemInput,
+  PaginatedWorkItems,
+  UpdateWorkItemInput,
+  WorkItem,
+  WorkItemListParams,
+  WorkItemPriority,
+  WorkItemStatus,
+  WorkItemType,
+} from "./types";
+
+interface UseWorkItemsOptions {
+  readonly limit: number;
+}
+
+export interface WorkItemFilters {
+  readonly projectId: string | null;
+  readonly sprintId: string | null;
+  readonly assigneeId: string | null;
+  readonly itemTypes: readonly WorkItemType[];
+  readonly statuses: readonly WorkItemStatus[];
+  readonly priorities: readonly WorkItemPriority[];
+  readonly search: string;
+}
+
+interface UseWorkItemsResult {
+  readonly data: PaginatedWorkItems | null;
+  readonly items: WorkItem[];
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly error: ApiError | null;
+  readonly page: number;
+  readonly totalPages: number;
+  readonly filters: WorkItemFilters;
+  readonly setProjectId: (value: string | null) => void;
+  readonly setSprintId: (value: string | null) => void;
+  readonly setAssigneeId: (value: string | null) => void;
+  readonly setItemTypes: (values: readonly WorkItemType[]) => void;
+  readonly setStatuses: (values: readonly WorkItemStatus[]) => void;
+  readonly setPriorities: (values: readonly WorkItemPriority[]) => void;
+  readonly setSearch: (value: string) => void;
+  readonly setPage: (page: number) => void;
+  readonly resetFilters: () => void;
+  readonly refresh: () => Promise<void>;
+  readonly createWorkItem: (input: CreateWorkItemInput) => Promise<WorkItem>;
+  readonly updateWorkItem: (
+    id: string,
+    input: UpdateWorkItemInput,
+  ) => Promise<WorkItem>;
+  readonly deleteWorkItem: (id: string) => Promise<void>;
+}
+
+const INITIAL_FILTERS: WorkItemFilters = {
+  projectId: null,
+  sprintId: null,
+  assigneeId: null,
+  itemTypes: [],
+  statuses: [],
+  priorities: [],
+  search: "",
+};
+
+export function useWorkItems(
+  options: UseWorkItemsOptions = { limit: 20 },
+): UseWorkItemsResult {
+  const { limit } = options;
+
+  const [data, setData] = useState<PaginatedWorkItems | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [filters, setFilters] = useState<WorkItemFilters>(INITIAL_FILTERS);
+  const mounted = useRef<boolean>(true);
+
+  const load = useCallback(
+    async (nextPage: number, currentFilters: WorkItemFilters) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params: WorkItemListParams = {
+          limit,
+          offset: Math.max(0, (nextPage - 1) * limit),
+          project_id: currentFilters.projectId ?? undefined,
+          sprint_id: currentFilters.sprintId ?? undefined,
+          assignee_id: currentFilters.assigneeId ?? undefined,
+          item_type:
+            currentFilters.itemTypes.length > 0
+              ? currentFilters.itemTypes
+              : undefined,
+          status:
+            currentFilters.statuses.length > 0
+              ? currentFilters.statuses
+              : undefined,
+          priority:
+            currentFilters.priorities.length > 0
+              ? currentFilters.priorities
+              : undefined,
+          search:
+            currentFilters.search.trim().length > 0
+              ? currentFilters.search
+              : undefined,
+        };
+        const result = await workItemsApi.list(params);
+        if (!mounted.current) return;
+        setData(result);
+      } catch (err) {
+        if (!mounted.current) return;
+        setError(toApiError(err));
+      } finally {
+        if (mounted.current) setIsLoading(false);
+      }
+    },
+    [limit],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    void load(page, filters);
+    return () => {
+      mounted.current = false;
+    };
+  }, [load, page, filters]);
+
+  const patchFilters = useCallback((patch: Partial<WorkItemFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setPage(1);
+  }, []);
+
+  const setProjectId = useCallback(
+    (value: string | null) => {
+      patchFilters({ projectId: value, sprintId: null });
+    },
+    [patchFilters],
+  );
+  const setSprintId = useCallback(
+    (value: string | null) => patchFilters({ sprintId: value }),
+    [patchFilters],
+  );
+  const setAssigneeId = useCallback(
+    (value: string | null) => patchFilters({ assigneeId: value }),
+    [patchFilters],
+  );
+  const setItemTypes = useCallback(
+    (values: readonly WorkItemType[]) => patchFilters({ itemTypes: values }),
+    [patchFilters],
+  );
+  const setStatuses = useCallback(
+    (values: readonly WorkItemStatus[]) => patchFilters({ statuses: values }),
+    [patchFilters],
+  );
+  const setPriorities = useCallback(
+    (values: readonly WorkItemPriority[]) =>
+      patchFilters({ priorities: values }),
+    [patchFilters],
+  );
+  const setSearch = useCallback(
+    (value: string) => patchFilters({ search: value }),
+    [patchFilters],
+  );
+
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+    setPage(1);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await load(page, filters);
+  }, [load, page, filters]);
+
+  const createWorkItem = useCallback(
+    async (input: CreateWorkItemInput) => {
+      setIsMutating(true);
+      try {
+        const created = await workItemsApi.create(input);
+        setFilters((current) => ({ ...current, projectId: input.project_id }));
+        setPage(1);
+        return created;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [],
+  );
+
+  const updateWorkItem = useCallback(
+    async (id: string, input: UpdateWorkItemInput) => {
+      setIsMutating(true);
+      try {
+        const updated = await workItemsApi.update(id, input);
+        await load(page, filters);
+        return updated;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [load, page, filters],
+  );
+
+  const deleteWorkItem = useCallback(
+    async (id: string) => {
+      setIsMutating(true);
+      try {
+        await workItemsApi.remove(id);
+        const remaining = (data?.items.length ?? 1) - 1;
+        const nextPage = remaining <= 0 && page > 1 ? page - 1 : page;
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await load(nextPage, filters);
+        }
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [data, load, page, filters],
+  );
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
+
+  return {
+    data,
+    items: data?.items ?? [],
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setProjectId,
+    setSprintId,
+    setAssigneeId,
+    setItemTypes,
+    setStatuses,
+    setPriorities,
+    setSearch,
+    setPage,
+    resetFilters,
+    refresh,
+    createWorkItem,
+    updateWorkItem,
+    deleteWorkItem,
+  };
+}
+```
+
+### frontend/src/features/work-items/useSprintOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { workItemsApi } from "./workItemsApi";
+import type { WorkItemProjectOption, WorkItemSprintOption } from "./types";
+
+interface UseSprintOptionsResult {
+  readonly projects: WorkItemProjectOption[];
+  readonly sprints: WorkItemSprintOption[];
+  readonly isLoadingProjects: boolean;
+  readonly isLoadingSprints: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useSprintOptions(
+  projectId: string | null,
+): UseSprintOptionsResult {
+  const [projects, setProjects] = useState<WorkItemProjectOption[]>([]);
+  const [sprints, setSprints] = useState<WorkItemSprintOption[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
+  const [isLoadingSprints, setIsLoadingSprints] = useState<boolean>(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoadingProjects(true);
+      setError(null);
+      try {
+        const result = await workItemsApi.listProjects();
+        if (!cancelled) setProjects(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoadingProjects(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectId) {
+      setSprints([]);
+      setIsLoadingSprints(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void (async () => {
+      setIsLoadingSprints(true);
+      setError(null);
+      try {
+        const result = await workItemsApi.listSprints(projectId);
+        if (!cancelled) setSprints(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoadingSprints(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  return {
+    projects,
+    sprints,
+    isLoadingProjects,
+    isLoadingSprints,
+    error,
+  };
+}
+```
+
+### frontend/src/features/work-items/useAssigneeOptions.ts
+
+```ts
+import { useEffect, useState } from "react";
+
+import { ApiError, toApiError } from "@/api/errors";
+
+import { workItemsApi } from "./workItemsApi";
+import type { WorkItemAssigneeOption } from "./types";
+
+interface UseAssigneeOptionsResult {
+  readonly assignees: WorkItemAssigneeOption[];
+  readonly isLoading: boolean;
+  readonly error: ApiError | null;
+}
+
+export function useAssigneeOptions(): UseAssigneeOptionsResult {
+  const [assignees, setAssignees] = useState<WorkItemAssigneeOption[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await workItemsApi.listUsers();
+        if (!cancelled) setAssignees(result.items);
+      } catch (err) {
+        if (!cancelled) setError(toApiError(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { assignees, isLoading, error };
+}
+```
+
+### frontend/src/features/work-items/components/WorkItemStatusBadge.tsx
+
+```tsx
+import { cn } from "@/lib/utils";
+
+import type { WorkItemPriority, WorkItemStatus } from "../types";
+
+const STATUS_STYLES: Record<WorkItemStatus, string> = {
+  backlog: "border border-border bg-muted text-muted-foreground",
+  todo:
+    "border border-slate-500/40 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  in_progress:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  in_review:
+    "border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  done:
+    "border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  cancelled: "border border-border bg-muted text-muted-foreground line-through",
+};
+
+const STATUS_LABELS: Record<WorkItemStatus, string> = {
+  backlog: "Backlog",
+  todo: "Todo",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+
+const PRIORITY_STYLES: Record<WorkItemPriority, string> = {
+  critical:
+    "border border-destructive/40 bg-destructive/10 text-destructive",
+  high:
+    "border border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  medium:
+    "border border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  low: "border border-border bg-muted text-muted-foreground",
+};
+
+const PRIORITY_LABELS: Record<WorkItemPriority, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export function WorkItemStatusBadge({ status }: { readonly status: WorkItemStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STATUS_STYLES[status],
+      )}
+    >
+      {STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+export function WorkItemPriorityBadge({
+  priority,
+}: {
+  readonly priority: WorkItemPriority;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        PRIORITY_STYLES[priority],
+      )}
+    >
+      {PRIORITY_LABELS[priority]}
+    </span>
+  );
+}
+
+export { STATUS_LABELS, PRIORITY_LABELS };
+```
+
+### frontend/src/features/work-items/components/Modal.tsx
+
+```tsx
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+interface ModalProps {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+  readonly maxWidthClassName?: string;
+}
+
+export function Modal({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        role="presentation"
+        onClick={onClose}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <div
+        className={cn(
+          "relative w-full rounded-lg border border-border bg-card p-6 shadow-lg",
+          maxWidthClassName,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/Pagination.tsx
+
+```tsx
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface PaginationProps {
+  readonly page: number;
+  readonly totalPages: number;
+  readonly total: number;
+  readonly onChange: (page: number) => void;
+}
+
+export function Pagination({
+  page,
+  totalPages,
+  total,
+  onChange,
+}: PaginationProps) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground sm:flex-row">
+      <p>
+        Page <span className="font-medium text-foreground">{page}</span> of{" "}
+        <span className="font-medium text-foreground">{totalPages}</span>
+        <span className="mx-2 opacity-50">•</span>
+        <span>{total} total</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page - 1)}
+          disabled={!canPrev}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(page + 1)}
+          disabled={!canNext}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/WorkItemFilters.tsx
+
+```tsx
+import { Search } from "lucide-react";
+
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Button } from "@/components/ui/Button";
+
+import type {
+  WorkItemAssigneeOption,
+  WorkItemPriority,
+  WorkItemProjectOption,
+  WorkItemSprintOption,
+  WorkItemStatus,
+  WorkItemType,
+} from "../types";
+import {
+  ITEM_TYPE_OPTIONS,
+  PRIORITY_OPTIONS,
+  STATUS_OPTIONS,
+} from "../workItemSchemas";
+
+interface WorkItemFiltersProps {
+  readonly projects: WorkItemProjectOption[];
+  readonly sprints: WorkItemSprintOption[];
+  readonly assignees: WorkItemAssigneeOption[];
+  readonly isLoadingProjects: boolean;
+  readonly isLoadingSprints: boolean;
+  readonly isLoadingAssignees: boolean;
+  readonly projectId: string | null;
+  readonly sprintId: string | null;
+  readonly assigneeId: string | null;
+  readonly itemTypes: readonly WorkItemType[];
+  readonly statuses: readonly WorkItemStatus[];
+  readonly priorities: readonly WorkItemPriority[];
+  readonly search: string;
+  readonly onProjectChange: (value: string | null) => void;
+  readonly onSprintChange: (value: string | null) => void;
+  readonly onAssigneeChange: (value: string | null) => void;
+  readonly onItemTypeChange: (value: WorkItemType | "") => void;
+  readonly onStatusChange: (value: WorkItemStatus | "") => void;
+  readonly onPriorityChange: (value: WorkItemPriority | "") => void;
+  readonly onSearchChange: (value: string) => void;
+  readonly onReset: () => void;
+}
+
+const LABELS_ITEM_TYPE: Record<WorkItemType, string> = {
+  epic: "Epic",
+  story: "Story",
+  task: "Task",
+  bug: "Bug",
+  spike: "Spike",
+};
+
+const LABELS_STATUS: Record<WorkItemStatus, string> = {
+  backlog: "Backlog",
+  todo: "Todo",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+
+const LABELS_PRIORITY: Record<WorkItemPriority, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export function WorkItemFilters({
+  projects,
+  sprints,
+  assignees,
+  isLoadingProjects,
+  isLoadingSprints,
+  isLoadingAssignees,
+  projectId,
+  sprintId,
+  assigneeId,
+  itemTypes,
+  statuses,
+  priorities,
+  search,
+  onProjectChange,
+  onSprintChange,
+  onAssigneeChange,
+  onItemTypeChange,
+  onStatusChange,
+  onPriorityChange,
+  onSearchChange,
+  onReset,
+}: WorkItemFiltersProps) {
+  const activeType = itemTypes[0] ?? "";
+  const activeStatus = statuses[0] ?? "";
+  const activePriority = priorities[0] ?? "";
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor="wi-project">Project</Label>
+          <select
+            id="wi-project"
+            value={projectId ?? ""}
+            onChange={(event) =>
+              onProjectChange(event.target.value ? event.target.value : null)
+            }
+            disabled={isLoadingProjects}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingProjects ? "Loading…" : "All projects"}
+            </option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name} ({project.key})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="wi-sprint">Sprint</Label>
+          <select
+            id="wi-sprint"
+            value={sprintId ?? ""}
+            onChange={(event) =>
+              onSprintChange(event.target.value ? event.target.value : null)
+            }
+            disabled={!projectId || isLoadingSprints}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {!projectId
+                ? "Select a project first"
+                : isLoadingSprints
+                ? "Loading…"
+                : "All sprints"}
+            </option>
+            {sprints.map((sprint) => (
+              <option key={sprint.id} value={sprint.id}>
+                {sprint.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="wi-assignee">Assignee</Label>
+          <select
+            id="wi-assignee"
+            value={assigneeId ?? ""}
+            onChange={(event) =>
+              onAssigneeChange(event.target.value ? event.target.value : null)
+            }
+            disabled={isLoadingAssignees}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {isLoadingAssignees ? "Loading…" : "All assignees"}
+            </option>
+            {assignees.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="wi-type">Type</Label>
+          <select
+            id="wi-type"
+            value={activeType}
+            onChange={(event) =>
+              onItemTypeChange(event.target.value as WorkItemType | "")
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All types</option>
+            {ITEM_TYPE_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {LABELS_ITEM_TYPE[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="wi-status">Status</Label>
+          <select
+            id="wi-status"
+            value={activeStatus}
+            onChange={(event) =>
+              onStatusChange(event.target.value as WorkItemStatus | "")
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {LABELS_STATUS[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="wi-priority">Priority</Label>
+          <select
+            id="wi-priority"
+            value={activePriority}
+            onChange={(event) =>
+              onPriorityChange(event.target.value as WorkItemPriority | "")
+            }
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">All priorities</option>
+            {PRIORITY_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {LABELS_PRIORITY[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-md">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            placeholder="Search by title…"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            className="pl-9"
+            aria-label="Search work items"
+          />
+        </div>
+        <Button type="button" variant="outline" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/WorkItemsTable.tsx
+
+```tsx
+import { Pencil, Trash2 } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+
+import type {
+  WorkItem,
+  WorkItemAssigneeOption,
+  WorkItemSprintOption,
+} from "../types";
+import {
+  WorkItemPriorityBadge,
+  WorkItemStatusBadge,
+} from "./WorkItemStatusBadge";
+
+interface WorkItemsTableProps {
+  readonly items: WorkItem[];
+  readonly sprints: WorkItemSprintOption[];
+  readonly assignees: WorkItemAssigneeOption[];
+  readonly isMutating: boolean;
+  readonly onEdit: (item: WorkItem) => void;
+  readonly onDelete: (item: WorkItem) => void;
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+export function WorkItemsTable({
+  items,
+  sprints,
+  assignees,
+  isMutating,
+  onEdit,
+  onDelete,
+}: WorkItemsTableProps) {
+  const sprintMap = new Map(sprints.map((sprint) => [sprint.id, sprint.name]));
+  const assigneeMap = new Map(
+    assignees.map((user) => [user.id, user.full_name]),
+  );
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Title
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Sprint
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Assignee
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Priority
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Points
+              </th>
+              <th scope="col" className="px-4 py-3 font-semibold">
+                Completed
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {items.map((item) => {
+              const canEdit = item.status !== "cancelled";
+              const canDelete = item.status !== "done";
+              return (
+                <tr
+                  key={item.id}
+                  className={cn(
+                    "transition-colors hover:bg-muted/30",
+                    item.status === "cancelled" && "opacity-70",
+                  )}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {item.title}
+                      </span>
+                      {item.description && (
+                        <span className="line-clamp-1 text-xs text-muted-foreground">
+                          {item.description}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {item.sprint_id
+                      ? sprintMap.get(item.sprint_id) ?? "—"
+                      : "Backlog"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {item.assignee_id
+                      ? assigneeMap.get(item.assignee_id) ?? "—"
+                      : "Unassigned"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <WorkItemPriorityBadge priority={item.priority} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <WorkItemStatusBadge status={item.status} />
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {item.story_points ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatDate(item.completed_at)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${item.title}`}
+                        onClick={() => onEdit(item)}
+                        disabled={isMutating || !canEdit}
+                        title={
+                          canEdit
+                            ? "Edit work item"
+                            : "Cancelled items cannot be edited"
+                        }
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${item.title}`}
+                        onClick={() => onDelete(item)}
+                        disabled={isMutating || !canDelete}
+                        title={
+                          canDelete
+                            ? "Delete work item"
+                            : "Completed items cannot be deleted"
+                        }
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive disabled:text-muted-foreground"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/CreateWorkItemDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import { useAssigneeOptions } from "../useAssigneeOptions";
+import { useSprintOptions } from "../useSprintOptions";
+import type {
+  CreateWorkItemInput,
+  WorkItemPriority,
+  WorkItemType,
+} from "../types";
+import {
+  ITEM_TYPE_OPTIONS,
+  PRIORITY_OPTIONS,
+  createWorkItemSchema,
+  parseLabels,
+  type CreateWorkItemFormValues,
+} from "../workItemSchemas";
+import { Modal } from "./Modal";
+
+interface CreateWorkItemDialogProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (input: CreateWorkItemInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+  readonly defaultProjectId: string | null;
+}
+
+const LABELS_ITEM_TYPE: Record<WorkItemType, string> = {
+  epic: "Epic",
+  story: "Story",
+  task: "Task",
+  bug: "Bug",
+  spike: "Spike",
+};
+
+const LABELS_PRIORITY: Record<WorkItemPriority, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export function CreateWorkItemDialog({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  defaultProjectId,
+}: CreateWorkItemDialogProps) {
+  const { toast } = useToast();
+  const [selectedProject, setSelectedProject] = useState<string | null>(
+    defaultProjectId,
+  );
+
+  const {
+    projects,
+    sprints,
+    isLoadingProjects,
+    isLoadingSprints,
+  } = useSprintOptions(selectedProject);
+  const { assignees, isLoading: isLoadingAssignees } = useAssigneeOptions();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting: formSubmitting },
+  } = useForm<CreateWorkItemFormValues>({
+    resolver: zodResolver(createWorkItemSchema),
+    defaultValues: {
+      project_id: defaultProjectId ?? "",
+      sprint_id: "",
+      title: "",
+      description: "",
+      item_type: "story",
+      priority: "medium",
+      story_points: "",
+      estimated_hours: "",
+      assignee_id: "",
+      labels: "",
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      setSelectedProject(defaultProjectId);
+      reset({
+        project_id: defaultProjectId ?? "",
+        sprint_id: "",
+        title: "",
+        description: "",
+        item_type: "story",
+        priority: "medium",
+        story_points: "",
+        estimated_hours: "",
+        assignee_id: "",
+        labels: "",
+      });
+    }
+  }, [open, defaultProjectId, reset]);
+
+  const watchedProject = watch("project_id");
+
+  useEffect(() => {
+    if (watchedProject !== selectedProject) {
+      setSelectedProject(watchedProject ? watchedProject : null);
+      setValue("sprint_id", "");
+    }
+  }, [watchedProject, selectedProject, setValue]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      const input: CreateWorkItemInput = {
+        project_id: values.project_id,
+        sprint_id: values.sprint_id ? values.sprint_id : null,
+        title: values.title.trim(),
+        description: values.description ? values.description.trim() : null,
+        item_type: values.item_type,
+        priority: values.priority,
+        story_points:
+          typeof values.story_points === "number" ? values.story_points : null,
+        estimated_hours:
+          typeof values.estimated_hours === "number"
+            ? values.estimated_hours
+            : null,
+        assignee_id: values.assignee_id ? values.assignee_id : null,
+        labels: parseLabels(values.labels ?? ""),
+      };
+      await onSubmit(input);
+      toast({ title: "Work item created", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not create work item",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create work item"
+      description="Add a story, task, bug, spike, or epic to a project."
+      maxWidthClassName="max-w-2xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-project">Project</Label>
+            <select
+              id="create-wi-project"
+              {...register("project_id")}
+              disabled={isLoadingProjects}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-invalid={Boolean(errors.project_id)}
+            >
+              <option value="">
+                {isLoadingProjects ? "Loading projects…" : "Select a project"}
+              </option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name} ({project.key})
+                </option>
+              ))}
+            </select>
+            {errors.project_id && (
+              <p className="text-xs text-destructive">
+                {errors.project_id.message}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-sprint">Sprint</Label>
+            <select
+              id="create-wi-sprint"
+              {...register("sprint_id")}
+              disabled={!selectedProject || isLoadingSprints}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {!selectedProject
+                  ? "Select a project first"
+                  : isLoadingSprints
+                  ? "Loading…"
+                  : "Backlog (no sprint)"}
+              </option>
+              {sprints.map((sprint) => (
+                <option key={sprint.id} value={sprint.id}>
+                  {sprint.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="create-wi-title">Title</Label>
+          <Input
+            id="create-wi-title"
+            placeholder="e.g. Improve onboarding conversion"
+            {...register("title")}
+            aria-invalid={Boolean(errors.title)}
+          />
+          {errors.title && (
+            <p className="text-xs text-destructive">{errors.title.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="create-wi-description">Description</Label>
+          <textarea
+            id="create-wi-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Describe the outcome, context, and acceptance criteria"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-type">Type</Label>
+            <select
+              id="create-wi-type"
+              {...register("item_type")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {ITEM_TYPE_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {LABELS_ITEM_TYPE[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-priority">Priority</Label>
+            <select
+              id="create-wi-priority"
+              {...register("priority")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {PRIORITY_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {LABELS_PRIORITY[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-points">Story points</Label>
+            <Input
+              id="create-wi-points"
+              type="number"
+              min={0}
+              step={1}
+              {...register("story_points")}
+              aria-invalid={Boolean(errors.story_points)}
+            />
+            {errors.story_points && (
+              <p className="text-xs text-destructive">
+                {errors.story_points.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-estimate">Estimate (hours)</Label>
+            <Input
+              id="create-wi-estimate"
+              type="number"
+              min={0}
+              step={0.5}
+              {...register("estimated_hours")}
+              aria-invalid={Boolean(errors.estimated_hours)}
+            />
+            {errors.estimated_hours && (
+              <p className="text-xs text-destructive">
+                {errors.estimated_hours.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-assignee">Assignee</Label>
+            <select
+              id="create-wi-assignee"
+              {...register("assignee_id")}
+              disabled={isLoadingAssignees}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {isLoadingAssignees ? "Loading…" : "Unassigned"}
+              </option>
+              {assignees.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="create-wi-labels">Labels</Label>
+            <Input
+              id="create-wi-labels"
+              placeholder="comma,separated,labels"
+              {...register("labels")}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create work item"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/EditWorkItemDialog.tsx
+
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { useToast } from "@/providers/ToastProvider";
+
+import { useAssigneeOptions } from "../useAssigneeOptions";
+import { useSprintOptions } from "../useSprintOptions";
+import type {
+  UpdateWorkItemInput,
+  WorkItem,
+  WorkItemPriority,
+  WorkItemStatus,
+} from "../types";
+import {
+  PRIORITY_OPTIONS,
+  STATUS_OPTIONS,
+  editWorkItemSchema,
+  parseLabels,
+  stringifyLabels,
+  type EditWorkItemFormValues,
+} from "../workItemSchemas";
+import { Modal } from "./Modal";
+
+interface EditWorkItemDialogProps {
+  readonly open: boolean;
+  readonly workItem: WorkItem | null;
+  readonly onClose: () => void;
+  readonly onSubmit: (id: string, input: UpdateWorkItemInput) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+const LABELS_STATUS: Record<WorkItemStatus, string> = {
+  backlog: "Backlog",
+  todo: "Todo",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+
+const LABELS_PRIORITY: Record<WorkItemPriority, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export function EditWorkItemDialog({
+  open,
+  workItem,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: EditWorkItemDialogProps) {
+  const { toast } = useToast();
+
+  const projectId = workItem?.project_id ?? null;
+  const { sprints, isLoadingSprints } = useSprintOptions(projectId);
+  const { assignees, isLoading: isLoadingAssignees } = useAssigneeOptions();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting: formSubmitting, isDirty },
+  } = useForm<EditWorkItemFormValues>({
+    resolver: zodResolver(editWorkItemSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      status: "backlog",
+      priority: "medium",
+      story_points: "",
+      estimated_hours: "",
+      sprint_id: "",
+      assignee_id: "",
+      labels: "",
+    },
+  });
+
+  useEffect(() => {
+    if (open && workItem) {
+      reset({
+        title: workItem.title,
+        description: workItem.description ?? "",
+        status: workItem.status,
+        priority: workItem.priority,
+        story_points: workItem.story_points ?? "",
+        estimated_hours: workItem.estimated_hours ?? "",
+        sprint_id: workItem.sprint_id ?? "",
+        assignee_id: workItem.assignee_id ?? "",
+        labels: stringifyLabels(workItem.labels),
+      });
+    }
+  }, [open, workItem, reset]);
+
+  const submitting = isSubmitting || formSubmitting;
+
+  const submit = handleSubmit(async (values) => {
+    if (!workItem) return;
+    try {
+      const input: UpdateWorkItemInput = {
+        title: values.title.trim(),
+        description: values.description ? values.description.trim() : null,
+        status: values.status,
+        priority: values.priority,
+        story_points:
+          typeof values.story_points === "number" ? values.story_points : null,
+        estimated_hours:
+          typeof values.estimated_hours === "number"
+            ? values.estimated_hours
+            : null,
+        sprint_id: values.sprint_id ? values.sprint_id : null,
+        assignee_id: values.assignee_id ? values.assignee_id : null,
+        labels: parseLabels(values.labels ?? ""),
+      };
+      await onSubmit(workItem.id, input);
+      toast({ title: "Work item updated", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not update work item",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  });
+
+  return (
+    <Modal
+      open={open && workItem !== null}
+      onClose={onClose}
+      title={`Edit ${workItem?.title ?? "work item"}`}
+      description={workItem ? `Type: ${workItem.item_type}` : undefined}
+      maxWidthClassName="max-w-2xl"
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="edit-wi-title">Title</Label>
+          <Input
+            id="edit-wi-title"
+            {...register("title")}
+            aria-invalid={Boolean(errors.title)}
+          />
+          {errors.title && (
+            <p className="text-xs text-destructive">{errors.title.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-wi-description">Description</Label>
+          <textarea
+            id="edit-wi-description"
+            rows={3}
+            {...register("description")}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {errors.description && (
+            <p className="text-xs text-destructive">
+              {errors.description.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-wi-status">Status</Label>
+            <select
+              id="edit-wi-status"
+              {...register("status")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {STATUS_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {LABELS_STATUS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-wi-priority">Priority</Label>
+            <select
+              id="edit-wi-priority"
+              {...register("priority")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {PRIORITY_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {LABELS_PRIORITY[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-wi-points">Story points</Label>
+            <Input
+              id="edit-wi-points"
+              type="number"
+              min={0}
+              step={1}
+              {...register("story_points")}
+              aria-invalid={Boolean(errors.story_points)}
+            />
+            {errors.story_points && (
+              <p className="text-xs text-destructive">
+                {errors.story_points.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-wi-estimate">Estimate (hours)</Label>
+            <Input
+              id="edit-wi-estimate"
+              type="number"
+              min={0}
+              step={0.5}
+              {...register("estimated_hours")}
+              aria-invalid={Boolean(errors.estimated_hours)}
+            />
+            {errors.estimated_hours && (
+              <p className="text-xs text-destructive">
+                {errors.estimated_hours.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-wi-sprint">Sprint</Label>
+            <select
+              id="edit-wi-sprint"
+              {...register("sprint_id")}
+              disabled={!projectId || isLoadingSprints}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {isLoadingSprints ? "Loading…" : "Backlog (no sprint)"}
+              </option>
+              {sprints.map((sprint) => (
+                <option key={sprint.id} value={sprint.id}>
+                  {sprint.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-wi-assignee">Assignee</Label>
+            <select
+              id="edit-wi-assignee"
+              {...register("assignee_id")}
+              disabled={isLoadingAssignees}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {isLoadingAssignees ? "Loading…" : "Unassigned"}
+              </option>
+              {assignees.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-wi-labels">Labels</Label>
+          <Input
+            id="edit-wi-labels"
+            placeholder="comma,separated,labels"
+            {...register("labels")}
+          />
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !isDirty}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/DeleteWorkItemDialog.tsx
+
+```tsx
+import { Loader2, TriangleAlert } from "lucide-react";
+
+import { toApiError } from "@/api/errors";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/providers/ToastProvider";
+
+import type { WorkItem } from "../types";
+import { Modal } from "./Modal";
+
+interface DeleteWorkItemDialogProps {
+  readonly open: boolean;
+  readonly workItem: WorkItem | null;
+  readonly onClose: () => void;
+  readonly onConfirm: (id: string) => Promise<void>;
+  readonly isSubmitting: boolean;
+}
+
+export function DeleteWorkItemDialog({
+  open,
+  workItem,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: DeleteWorkItemDialogProps) {
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!workItem) return;
+    try {
+      await onConfirm(workItem.id);
+      toast({ title: "Work item deleted", variant: "success" });
+      onClose();
+    } catch (err) {
+      const apiError = toApiError(err);
+      toast({
+        title: "Could not delete work item",
+        description: apiError.message,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Modal
+      open={open && workItem !== null}
+      onClose={onClose}
+      title="Delete work item"
+      maxWidthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <TriangleAlert className="mt-0.5 h-5 w-5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium">This action cannot be undone.</p>
+            <p className="mt-1 opacity-90">
+              {workItem ? (
+                <>
+                  You are about to permanently remove{" "}
+                  <span className="font-semibold">{workItem.title}</span>.
+                </>
+              ) : (
+                "Work item details are unavailable."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting || !workItem}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete work item"
+            )}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/WorkItemsLoadingState.tsx
+
+```tsx
+export function WorkItemsLoadingState() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 p-4">
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-12 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/work-items/components/WorkItemsErrorState.tsx
+
+```tsx
+import { AlertCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/Button";
+
+interface WorkItemsErrorStateProps {
+  readonly message: string;
+  readonly onRetry: () => void;
+}
+
+export function WorkItemsErrorState({
+  message,
+  onRetry,
+}: WorkItemsErrorStateProps) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-8 text-center text-destructive"
+    >
+      <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      <div>
+        <h3 className="text-base font-semibold">Failed to load work items</h3>
+        <p className="mt-1 text-sm opacity-90">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        className="border-destructive/40 text-destructive hover:bg-destructive/20"
+      >
+        Try again
+      </Button>
+    </div>
+  );
+}
+```
+
+### frontend/src/features/work-items/index.ts
+
+```ts
+export { workItemsApi } from "./workItemsApi";
+export { useWorkItems } from "./useWorkItems";
+export { useSprintOptions } from "./useSprintOptions";
+export { useAssigneeOptions } from "./useAssigneeOptions";
+export type {
+  CreateWorkItemInput,
+  PaginatedWorkItems,
+  UpdateWorkItemInput,
+  WorkItem,
+  WorkItemAssigneeOption,
+  WorkItemListParams,
+  WorkItemPriority,
+  WorkItemProjectOption,
+  WorkItemSprintOption,
+  WorkItemStatus,
+  WorkItemType,
+} from "./types";
+export { CreateWorkItemDialog } from "./components/CreateWorkItemDialog";
+export { DeleteWorkItemDialog } from "./components/DeleteWorkItemDialog";
+export { EditWorkItemDialog } from "./components/EditWorkItemDialog";
+export { Modal as WorkItemModal } from "./components/Modal";
+export { Pagination as WorkItemsPagination } from "./components/Pagination";
+export { WorkItemFilters } from "./components/WorkItemFilters";
+export {
+  WorkItemPriorityBadge,
+  WorkItemStatusBadge,
+} from "./components/WorkItemStatusBadge";
+export { WorkItemsErrorState } from "./components/WorkItemsErrorState";
+export { WorkItemsLoadingState } from "./components/WorkItemsLoadingState";
+export { WorkItemsTable } from "./components/WorkItemsTable";
+```
+
+### frontend/src/pages/work-items/WorkItemsPage.tsx
+
+```tsx
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  CreateWorkItemDialog,
+  DeleteWorkItemDialog,
+  EditWorkItemDialog,
+  WorkItemFilters,
+  WorkItemsErrorState,
+  WorkItemsLoadingState,
+  WorkItemsPagination,
+  WorkItemsTable,
+  useAssigneeOptions,
+  useSprintOptions,
+  useWorkItems,
+  type WorkItem,
+  type WorkItemPriority,
+  type WorkItemStatus,
+  type WorkItemType,
+} from "@/features/work-items";
+
+const PAGE_SIZE = 20;
+
+export default function WorkItemsPage() {
+  const {
+    data,
+    items,
+    isLoading,
+    isMutating,
+    error,
+    page,
+    totalPages,
+    filters,
+    setProjectId,
+    setSprintId,
+    setAssigneeId,
+    setItemTypes,
+    setStatuses,
+    setPriorities,
+    setSearch,
+    setPage,
+    resetFilters,
+    refresh,
+    createWorkItem,
+    updateWorkItem,
+    deleteWorkItem,
+  } = useWorkItems({ limit: PAGE_SIZE });
+
+  const {
+    projects,
+    sprints,
+    isLoadingProjects,
+    isLoadingSprints,
+  } = useSprintOptions(filters.projectId);
+  const { assignees, isLoading: isLoadingAssignees } = useAssigneeOptions();
+
+  const [isCreateOpen, setCreateOpen] = useState<boolean>(false);
+  const [editTarget, setEditTarget] = useState<WorkItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkItem | null>(null);
+
+  const handleItemType = (value: WorkItemType | "") => {
+    setItemTypes(value ? [value] : []);
+  };
+  const handleStatus = (value: WorkItemStatus | "") => {
+    setStatuses(value ? [value] : []);
+  };
+  const handlePriority = (value: WorkItemPriority | "") => {
+    setPriorities(value ? [value] : []);
+  };
+
+  const totalCount = data?.total ?? 0;
+  const hasResults = items.length > 0;
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Work items</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track stories, tasks, bugs, spikes, and epics across your projects.
+          </p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New work item
+        </Button>
+      </header>
+
+      <WorkItemFilters
+        projects={projects}
+        sprints={sprints}
+        assignees={assignees}
+        isLoadingProjects={isLoadingProjects}
+        isLoadingSprints={isLoadingSprints}
+        isLoadingAssignees={isLoadingAssignees}
+        projectId={filters.projectId}
+        sprintId={filters.sprintId}
+        assigneeId={filters.assigneeId}
+        itemTypes={filters.itemTypes}
+        statuses={filters.statuses}
+        priorities={filters.priorities}
+        search={filters.search}
+        onProjectChange={setProjectId}
+        onSprintChange={setSprintId}
+        onAssigneeChange={setAssigneeId}
+        onItemTypeChange={handleItemType}
+        onStatusChange={handleStatus}
+        onPriorityChange={handlePriority}
+        onSearchChange={setSearch}
+        onReset={resetFilters}
+      />
+
+      {isLoading && !data ? (
+        <WorkItemsLoadingState />
+      ) : error ? (
+        <WorkItemsErrorState
+          message={error.message}
+          onRetry={() => void refresh()}
+        />
+      ) : !hasResults ? (
+        <EmptyState
+          title={
+            filters.search ||
+            filters.projectId ||
+            filters.sprintId ||
+            filters.assigneeId ||
+            filters.itemTypes.length > 0 ||
+            filters.statuses.length > 0 ||
+            filters.priorities.length > 0
+              ? "No work items match your filters"
+              : "No work items yet"
+          }
+          description={
+            filters.search
+              ? "Try broadening the search or clearing filters."
+              : "Create the first work item to begin tracking delivery."
+          }
+          action={
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetFilters}
+              >
+                Reset filters
+              </Button>
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                New work item
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <WorkItemsTable
+            items={items}
+            sprints={sprints}
+            assignees={assignees}
+            isMutating={isMutating}
+            onEdit={setEditTarget}
+            onDelete={setDeleteTarget}
+          />
+          <WorkItemsPagination
+            page={page}
+            totalPages={totalPages}
+            total={totalCount}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      <CreateWorkItemDialog
+        open={isCreateOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={async (input) => {
+          await createWorkItem(input);
+        }}
+        isSubmitting={isMutating}
+        defaultProjectId={filters.projectId}
+      />
+
+      <EditWorkItemDialog
+        open={editTarget !== null}
+        workItem={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={async (id, input) => {
+          await updateWorkItem(id, input);
+        }}
+        isSubmitting={isMutating}
+      />
+
+      <DeleteWorkItemDialog
+        open={deleteTarget !== null}
+        workItem={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          await deleteWorkItem(id);
+        }}
+        isSubmitting={isMutating}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+### MANUAL ROUTER PATCH
+
+Wire the new `WorkItemsPage` into `src/router/AppRouter.tsx` without altering any other lines.
+
+1. Add this lazy import next to the other page imports at the top of `src/router/AppRouter.tsx`:
+
+```tsx
+const WorkItemsPage = lazy(() => import("@/pages/work-items/WorkItemsPage"));
+```
+
+2. Inside the protected `<Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>` block, replace:
+
+```tsx
+<Route
+  path={ROUTES.WORK_ITEMS}
+  element={<ModulePlaceholder title="Work Items" />}
+/>
+```
+
+with:
+
+```tsx
+<Route path={ROUTES.WORK_ITEMS} element={<WorkItemsPage />} />
+```
+
+No other lines in `AppRouter.tsx` need to change.
