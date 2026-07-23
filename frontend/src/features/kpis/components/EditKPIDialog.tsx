@@ -96,7 +96,7 @@ export function EditKPIDialog({
         target_value: toStringOrEmpty(kpi.target_value),
         current_value: toStringOrEmpty(kpi.current_value),
         data_source: kpi.data_source ?? "",
-        refresh_frequency_hours: toStringOrEmpty(kpi.refresh_frequency_hours),
+        refresh_frequency_hours: kpi.refresh_frequency_hours ?? "",
         is_active: kpi.is_active,
       });
     }
